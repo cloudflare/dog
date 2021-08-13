@@ -1,0 +1,11 @@
+name = "gateway-demo"
+type = "javascript"
+workers_dev = true
+# Add your account ID here
+account_id = ""
+
+[build]
+command = "npm run build:example"
+
+[build.upload]
+format = "modules"
