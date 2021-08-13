@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "version": "0.0.0",
+  "module": "build/index.js",
+  "scripts": {
+    "dev:example": "miniflare --do --modules --watch",
+    "build:example": "cfw build example --single"
+  },
+  "dependencies": {
+    "worktop": "0.7.1"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "2.2.2",
+    "cfw": "0.1.3",
+    "miniflare": "1.3.3"
+  }
+}
