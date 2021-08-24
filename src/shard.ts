@@ -1,4 +1,5 @@
 import * as utils from './internal/utils';
+import * as ROUTES from './internal/routes';
 import * as HEADERS from './internal/headers';
 
 import type { Gateway } from './gateway';
@@ -182,6 +183,6 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		// Prepare internal request
 		// ~> notify Gateway of -1 count
 		let gateway = this.target.get(gid);
-		await gateway.fetch('/~$~/close', { headers });
+		await gateway.fetch(ROUTES.CLOSE, { headers });
 	}
 }

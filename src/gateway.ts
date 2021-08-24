@@ -1,4 +1,5 @@
 import * as HEADERS from './internal/headers';
+import * as ROUTES from './internal/routes';
 import * as utils from './internal/utils';
 
 import type { Shard } from './shard';
@@ -48,7 +49,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		console.log('[GATEWAY][fetch] pathname', pathname);
 
 		// ~> internal SHARD request
-		if (pathname === '/~$~/close') {
+		if (pathname === ROUTES.CLOSE) {
 			try {
 				return await this.#close(request);
 			} catch (err) {
