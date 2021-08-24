@@ -6,37 +6,41 @@ import type { Gateway } from './gateway';
 // ---
 
 export type ReqID = string;
+export type Pool = Map<ReqID, State>;
 export type Message = JSON.Object | string;
 
 export interface State {
 	gateway: string;
-	socket?: WebSocket;
+	socket: WebSocket;
 }
 
 export interface Socket {
 	uid: ReqID;
 	send: WebSocket['send'];
 	close: WebSocket['close'];
-	emit: any; // TODO: typeof broadcast;
+	emit(msg: Message): void;
 }
 
 export type SocketHandler = (socket: Socket) => Promise<void> | void;
 
-// TODO
-// export function broadcast(socket) {
-// }
+export function broadcast(pool: Pool, msg: Message, except?: ReqID) {
+	if (typeof msg === 'object') msg = JSON.stringify(msg);
+	for (let [rid, state] of pool) {
+		rid === except || state.socket.send(msg);
+	}
+}
 
 // TODO: any benefit in passing `reqid` to user's `receive` method?
 export abstract class Shard<T extends ModuleWorker.Bindings> {
 	public readonly uid: string;
 
-	private readonly conn: Map<ReqID, State>;
+	private readonly pool: Pool;
 	private target: DurableObjectNamespace;
 
 	constructor(state: DurableObjectState, env: T) {
 		this.uid = state.id.toString();
 		this.target = this.link(env);
-		this.conn = new Map;
+		this.pool = new Map;
 	}
 
 	/**
@@ -45,26 +49,27 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	 */
 	abstract link(bindings: T): DurableObjectNamespace & Gateway<T>;
 
-	// This request has connected via WS
-	abstract onopen?: SocketHandler;
-	// A message was received
-	abstract onmessage?<T>(socket: Socket, data: T): Promise<void> | void;
-
-	// The connection was closed
-	abstract onclose?: SocketHandler;
-	// The connection closed due to error
-	abstract onerror?: SocketHandler;
-	// Another connection has joined the pool
-	// abstract onconnect?(req: Request): void;
-	// Another connection has left the pool
-	// abstract ondisconnect?(req: Request): void;
-
 	/**
 	 * Receive the HTTP request.
-	 * @NOTE User must call `this.connect`
+	 * @NOTE User must call `this.connect` for WS connection.
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract receive(req: Request, reqid: ReqID): Promise<Response> | Response;
+
+	// This request has connected via WS
+	abstract onopen?(socket: Socket): Promise<void> | void;
+	// A message was received
+	abstract onmessage?(socket: Socket, data: string): Promise<void> | void;
+	// The connection was closed
+	abstract onclose?(socket: Socket): Promise<void> | void;
+	// The connection closed due to error
+	abstract onerror?(socket: Socket): Promise<void> | void;
+
+	// Another connection has joined the pool
+	// abstract onconnect?(socket: Socket): Promise<void> | void;
+
+	// Another connection has left the pool
+	// abstract ondisconnect?(socket: Socket): Promise<void> | void;
 
 	/**
 	 * Handle the WS connection upgrade
@@ -86,7 +91,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		if (value !== '13') return utils.abort(400);
 
 		try {
-			var { rid, gid } = this.#validate(req);
+			var { rid, gid } = utils.validate(req, this.uid);
 		} catch (err) {
 			return utils.abort(400, (err as Error).message);
 		}
@@ -100,7 +105,9 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 			uid: rid,
 			send: server.send.bind(server),
 			close: server.close.bind(server),
-			emit: server.close.bind(server),
+			emit: (msg: Message) => {
+				broadcast(this.pool, msg, rid);
+			}
 		};
 
 		let closer = async (evt: Event) => {
@@ -111,8 +118,9 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 					await this.onclose(socket);
 				}
 			} finally {
+				console.error('[ SHARD ][closer][finally]', { gid, rid });
+				await this.#decrement(rid, gid);
 				server.close();
-				await this.#close(rid);
 			}
 		}
 
@@ -125,11 +133,12 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 		if (this.onmessage) {
 			server.addEventListener('message', evt => {
+				console.log('[  RAW  ][message]', evt);
 				this.onmessage!(socket, evt.data);
 			});
 		}
 
-		this.conn.set(rid, {
+		this.pool.set(rid, {
 			gateway: gid,
 			socket: server,
 		});
@@ -146,9 +155,10 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	 */
 	async fetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
 		let request = new Request(input, init);
+		console.log('[ SHARD ][fetch] url', request.url);
 
 		try {
-			var { rid } = this.#validate(request);
+			var { rid, gid } = utils.validate(request, this.uid);
 		} catch (err) {
 			return utils.abort(400, (err as Error).message);
 		}
@@ -163,51 +173,28 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		} catch (err) {
 			return res = utils.abort(400, err.stack || 'Error in `receive` method');
 		} finally {
-			if (res!.status !== 101) {
-				await this.#close(rid);
-			}
+			let foo = res!.clone();
+			console.log('[ SHARD ][fetch] finally', foo.status, await foo.text());
+			if (res!.status !== 101) await this.#decrement(rid, gid);
 		}
 	}
 
 	/**
-	 * Ensure the HEADER values exist & match.
+	 * Tell relevant Gateway object to -1 its count
 	 */
-	#validate(req: Request) {
-		let sid = req.headers.get(HEADERS.SHARDID);
-		if (sid == null) throw new Error('Missing: Shard ID');
-		if (sid !== this.uid) throw new Error('Mismatch: Shard ID');
+	async #decrement(rid: ReqID, gid: string) {
+		console.log('[ SHARD ][#decrement]', { gid, rid });
 
-		let rid = req.headers.get(HEADERS.CLIENTID) as ReqID;
-		if (rid == null) throw new Error('Missing: Request ID');
-
-		let gid = req.headers.get(HEADERS.GATEWAYID);
-		if (gid == null) throw new Error('Missing: Gateway ID');
-
-		return { sid, rid, gid };
-	}
-
-	/**
-	 *
-	 */
-	async #close(reqid: ReqID) {
-		let conn = this.conn.get(reqid);
-
-		if (conn == null) {
-			throw new Error('TODO: what to do?');
-		}
-
-		if (conn.socket) {
-			conn.socket.close();
-		}
+		this.pool.delete(rid);
 
 		let headers = new Headers;
-		headers.set(HEADERS.GATEWAYID, conn.gateway);
-		headers.set(HEADERS.CLIENTID, reqid);
-		headers.set(HEADERS.SHARDID, String(this.uid));
+		headers.set(HEADERS.GATEWAYID, gid);
+		headers.set(HEADERS.SHARDID, this.uid);
+		headers.set(HEADERS.CLIENTID, rid);
 
 		// Prepare internal request
 		// ~> notify Gateway of -1 count
-		let gateway = this.target.get(conn.gateway);
-		await gateway.fetch('/$/close', { headers });
+		let gateway = this.target.get(gid);
+		await gateway.fetch('/~$~/close', { headers });
 	}
 }

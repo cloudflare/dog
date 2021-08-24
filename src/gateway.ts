@@ -1,20 +1,17 @@
-import type { ReqID, Shard } from './shard';
 import * as HEADERS from './internal/headers';
+import * as utils from './internal/utils';
 
-// STORAGE: `hash:${ReqID}` => DurableObjectId
-// STORAGE: `bucket:${string}` => Bucket
+import type { Shard } from './shard';
 
-interface Bucket {
-	uid: DurableObjectId;
-	live: number;
-}
+// STORAGE: `rid:${rid}` => (string) sid
+// STORAGE: `sid:${sid}` => (number) "live"
 
+// TODO: should even use storage?
 export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	public uid: string;
 	public abstract limit: number;
-	public storage: DurableObjectStorage;
-
-	private target: DurableObjectNamespace;
+	public readonly target: DurableObjectNamespace;
+	private storage: DurableObjectStorage;
 	// private current: UID;
 
 	constructor(state: DurableObjectState, env: T) {
@@ -30,42 +27,90 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	abstract link(bindings: T): DurableObjectNamespace & Shard<T>;
 
 	/**
-	 * Generate a hashed keyname for the Request
+	 * Generate a unique identifier for the request.
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract identify(req: Request): Promise<string> | string;
 
 	/**
+	 * Generate a `DurableObjectId` for the shard cluster
+	 */
+	clusterize(req: Request): Promise<DurableObjectId> | DurableObjectId {
+		return this.target.newUniqueId();
+	}
+
+	/**
 	 * Receive the request & figure out where to send it.
 	 */
 	async fetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
-		let shard: DurableObjectStub | void;
 		let request = new Request(input, init);
-		let hash: ReqID = await this.identify(request);
+		let { pathname } = new URL(request.url, 'foo://');
+		console.log('[GATEWAY][fetch] pathname', pathname);
 
-		let uid = await this.storage.get<DurableObjectId | void>(`hash:${hash}`);
-		let bucket = uid && await this.storage.get<Bucket | void>(`bucket:${uid}`);
-
-		if (bucket && this.limit - bucket.live > 0) {
-			// use this shard
-			shard = this.target.get(bucket.uid);
-		} else {
-			// make a new shard
-			uid = this.target.newUniqueId().toString();
-			await this.storage.put<DurableObjectId>(`hash:${hash}`, uid);
-			shard = this.target.get(uid);
+		// ~> internal SHARD request
+		if (pathname === '/~$~/close') {
+			try {
+				return await this.#close(request);
+			} catch (err) {
+				return utils.abort(400, (err as Error).message);
+			}
 		}
 
-		await this.storage.put<Bucket>(`bucket:${uid}`, {
-			uid: shard.id,
-			live: (bucket && bucket.live || 0) + 1,
-		});
+		console.log('[GATEWAY][fetch] request', [...request.headers]);
 
-		// Attach indentifiers / hash keys
-		request.headers.set(HEADERS.CLIENTID, hash);
-		request.headers.set(HEADERS.GATEWAYID, String(this.uid));
-		request.headers.set(HEADERS.SHARDID, String(shard.id));
+		let rid = await this.identify(request);
+		console.log('[GATEWAY][fetch] rid', rid);
+
+		let shard: DurableObjectStub | void, alive: number | void;
+		let sid = await this.storage.get<string|void> (`rid:${rid}`);
+		if (sid != null) alive = await this.storage.get<number|void>(`sid:${sid}`);
+
+		console.log('[GATEWAY][fetch] storage', { sid, alive });
+
+		if (alive != null && this.limit >= ++alive) {
+			// use this shard if found & not over limit
+			console.log('IF-OK', { sid, limit: this.limit, alive });
+		} else {
+			// generate a new shard
+			console.log('ELSE', { sid, limit: this.limit });
+			sid = await this.clusterize(request).toString();
+			console.log('~> ELSE NEW:', { sid });
+			await this.storage.put<string>(`rid:${rid}`, sid);
+			alive = 1;
+		}
+
+		shard = this.target.get(sid!);
+		await this.storage.put<number>(`sid:${sid!}`, alive);
+		console.log('[GATEWAY][counter]', { sid, alive });
+
+		// Attach indentifiers / rid keys
+		request.headers.set(HEADERS.CLIENTID, rid);
+		request.headers.set(HEADERS.GATEWAYID, this.uid);
+		request.headers.set(HEADERS.SHARDID, String(sid!));
+
+		let keys = await this.storage.list();
+		console.log({ keys });
+
+		// console.log('[GATEWAY][fetch] internal headers', [...request.headers]);
 
 		return shard.fetch(request);
+	}
+
+	async #close(req: Request): Promise<Response> {
+		var { rid, sid, gid } = utils.validate(req);
+		if (gid !== this.uid) throw new Error('Mismatch: Gateway ID');
+
+		await this.storage.delete(`rid:${rid}`);
+
+		let key = `sid:${sid}`;
+		let alive = await this.storage.get<number>(key);
+		if (alive == null) throw new Error('Unknown: Shard ID');
+
+		// TODO: sort by availability
+		alive = Math.max(0, --alive);
+		await this.storage.put<number>(key, alive);
+		console.log('[GATEWAY][counter]', { sid, alive });
+
+		return new Response('OK');
 	}
 }

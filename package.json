@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "module": "build/index.js",
   "scripts": {
-    "dev:example": "miniflare --do --modules --watch",
+    "dev:example": "miniflare -o ROOM=Room -o LOBBY=Lobby --modules --watch",
     "build:example": "cfw build example --single"
   },
   "dependencies": {
