@@ -112,11 +112,8 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 		let closer = async (evt: Event) => {
 			try {
-				if (evt.type === 'error') {
-					if (this.onerror) await this.onerror(socket);
-				} else if (this.onclose) {
-					await this.onclose(socket);
-				}
+				if (evt.type === 'error' && this.onerror) await this.onerror(socket);
+				else if (this.onclose) await this.onclose(socket);
 			} finally {
 				console.error('[ SHARD ][closer][finally]', { gid, rid });
 				await this.#decrement(rid, gid);
