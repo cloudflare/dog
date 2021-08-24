@@ -118,6 +118,6 @@ interface ModuleWorker<Environment extends ModuleWorker.Bindings = ModuleWorker.
 // ---
 
 declare namespace JSON {
-	type Value = Date | RegExp | string | boolean | null | JSON.Object;
+	type Value = Date | RegExp | string | number | boolean | null | JSON.Object;
 	type Object = JSON.Value[] | { [key: string]: JSON.Value };
 }
