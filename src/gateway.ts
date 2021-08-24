@@ -12,7 +12,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	public abstract limit: number;
 	public readonly target: DurableObjectNamespace;
 	private storage: DurableObjectStorage;
-	// private current: UID;
+	private current?: DurableObjectId;
 
 	constructor(state: DurableObjectState, env: T) {
 		this.storage = state.storage;
@@ -56,13 +56,13 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 			}
 		}
 
-		console.log('[GATEWAY][fetch] request', [...request.headers]);
+		// console.log('[GATEWAY][fetch] request', [...request.headers]);
 
 		let rid = await this.identify(request);
 		console.log('[GATEWAY][fetch] rid', rid);
 
 		let shard: DurableObjectStub | void, alive: number | void;
-		let sid = await this.storage.get<string|void> (`rid:${rid}`);
+		let sid = await this.storage.get<string|void> (`rid:${rid}`) || this.current;
 		if (sid != null) alive = await this.storage.get<number|void>(`sid:${sid}`);
 
 		console.log('[GATEWAY][fetch] storage', { sid, alive });
@@ -71,22 +71,27 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 			// use this shard if found & not over limit
 			console.log('IF-OK', { sid, limit: this.limit, alive });
 		} else {
+			// TODO: look at `this.list` for next available
 			// generate a new shard
 			console.log('ELSE', { sid, limit: this.limit });
 			sid = await this.clusterize(request).toString();
 			console.log('~> ELSE NEW:', { sid });
-			await this.storage.put<string>(`rid:${rid}`, sid);
 			alive = 1;
 		}
 
-		shard = this.target.get(sid!);
-		await this.storage.put<number>(`sid:${sid!}`, alive);
-		console.log('[GATEWAY][counter]', { sid, alive });
+		let shardid = sid!.toString();
+		shard = this.target.get(shardid);
 
-		// Attach indentifiers / rid keys
-		request.headers.set(HEADERS.CLIENTID, rid);
+		await this.storage.put<string>(`rid:${rid}`, shardid);
+		await this.storage.put<number>(`sid:${shardid}`, alive);
+		console.log('[GATEWAY][counter]', { sid: shardid, alive });
+
+		this.current = (alive < this.limit) ? shardid : undefined;
+
+		// Attach indentifiers / hash keys
 		request.headers.set(HEADERS.GATEWAYID, this.uid);
-		request.headers.set(HEADERS.SHARDID, String(sid!));
+		request.headers.set(HEADERS.SHARDID, shardid);
+		request.headers.set(HEADERS.CLIENTID, rid);
 
 		let keys = await this.storage.list();
 		console.log({ keys });
@@ -110,6 +115,8 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		alive = Math.max(0, --alive);
 		await this.storage.put<number>(key, alive);
 		console.log('[GATEWAY][counter]', { sid, alive });
+
+		this.current = sid;
 
 		return new Response('OK');
 	}
