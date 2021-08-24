@@ -17,7 +17,6 @@
     "noImplicitAny": true,
     "module": "es2020",
 		"allowJs": false,
-
 		"baseUrl": ".",
 		"paths": {
 			"$lib/*": ["src/*"]

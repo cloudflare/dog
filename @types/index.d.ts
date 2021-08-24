@@ -83,3 +83,41 @@ interface Request {
 		continent: string;
 	};
 }
+
+// interface FetchEvent {
+// 	passThroughOnException: () => void;
+// }
+
+interface DurableObject<Environment extends ModuleWorker.Bindings = ModuleWorker.Bindings> {
+	state: DurableObjectState;
+	constructor(state: DurableObjectState, env: Environment): DurableObject;
+	fetch(request: Request): Promise<Response> | Response;
+}
+
+declare namespace ModuleWorker {
+	type Bindings = Record<string, KVNamespace | DurableObjectNamespace | string>;
+
+	type FetchHandler<Environment extends Bindings = Bindings> = (
+		request: Request,
+		env: Environment,
+		ctx: Pick<FetchEvent, 'waitUntil'|'passThroughOnException'>
+	) => Promise<Response> | Response;
+
+	type CronHandler<Environment extends Bindings = Bindings> = (
+		event: Omit<ScheduledEvent, 'waitUntil'>,
+		env: Environment,
+		ctx: Pick<ScheduledEvent, 'waitUntil'>
+	) => Promise<void> | void;
+}
+
+interface ModuleWorker<Environment extends ModuleWorker.Bindings = ModuleWorker.Bindings> {
+	fetch?: ModuleWorker.FetchHandler<Environment>;
+	scheduled?: ModuleWorker.CronHandler<Environment>;
+}
+
+// ---
+
+declare namespace JSON {
+	type Value = Date | RegExp | string | boolean | null | JSON.Object;
+	type Object = JSON.Value[] | { [key: string]: JSON.Value };
+}
