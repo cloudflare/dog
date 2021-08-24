@@ -52,32 +52,24 @@ export class Room extends Shard<Bindings> {
 		input.uid = input.uid || socket.uid;
 
 		if (input.type === 'whoami') {
+			// save the `uid`: `name` association
 			this.users.set(input.uid, input.user || 'anon');
 			socket.send(JSON.stringify(input));
-		} else if (input.type === 'users:list') {
-			input.list = [];
+
+			// send down a list of all connected users
+			let arr = [];
 			for (let [uid, name] of this.users) {
-				input.list.push({ uid, name });
+				arr.push({ uid, name });
 			}
-			socket.send(JSON.stringify(input));
+
+			socket.send(
+				JSON.stringify({
+					type: 'users:list',
+					list: arr,
+				})
+			);
 		} else {
 			socket.emit(input);
 		}
-
-		// try {
-		// 	let input = JSON.parse(data);
-		// 	console.log({ input });
-		// 	if (input.value < 10) {
-		// 		console.log('i am here', input.value);
-		// 		socket.emit({
-		// 			uid: socket.uid,
-		// 			value: input.value + 1
-		// 		});
-		// 	} else {
-		// 		console.log('~> DONE');
-		// 	}
-		// } catch (err) {
-		// 	console.log('[ HELLO ][onmessage]', socket.uid, { data });
-		// }
 	}
 }

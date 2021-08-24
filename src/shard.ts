@@ -21,16 +21,6 @@ export interface Socket {
 	emit(msg: Message): void;
 }
 
-export type SocketHandler = (socket: Socket) => Promise<void> | void;
-
-export function broadcast(pool: Pool, msg: Message, except?: ReqID) {
-	if (typeof msg === 'object') msg = JSON.stringify(msg);
-	for (let [rid, state] of pool) {
-		rid === except || state.socket.send(msg);
-	}
-}
-
-// TODO: any benefit in passing `reqid` to user's `receive` method?
 export abstract class Shard<T extends ModuleWorker.Bindings> {
 	public readonly uid: string;
 
@@ -58,10 +48,13 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 	// This request has connected via WS
 	onopen?(socket: Socket): Promise<void> | void;
+
 	// A message was received
 	onmessage?(socket: Socket, data: string): Promise<void> | void;
+
 	// The connection was closed
 	onclose?(socket: Socket): Promise<void> | void;
+
 	// The connection closed due to error
 	onerror?(socket: Socket): Promise<void> | void;
 
@@ -90,7 +83,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 			return utils.abort(400, (err as Error).message);
 		}
 
-		// TODO: check for `conn.get(rid)` here
+		// TODO: check for `conn.get(rid)` here?
 		let { 0: client, 1: server } = new WebSocketPair;
 
 		server.accept();
@@ -99,10 +92,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 			uid: rid,
 			send: server.send.bind(server),
 			close: server.close.bind(server),
-			emit: (msg: Message) => {
-				console.log('EMIT FROM:', socket.uid);
-				broadcast(this.pool, msg, socket.uid);
-			}
+			emit: this.#emit.bind(this, rid),
 		};
 
 		let closer = async (evt: Event) => {
@@ -120,8 +110,6 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		server.addEventListener('error', closer);
 
 		if (this.onmessage) {
-			console.log('HAD ONMESSAGE');
-
 			server.addEventListener('message', evt => {
 				// console.log('[  RAW  ][message]', rid, evt);
 				this.onmessage!(socket, evt.data);
@@ -164,9 +152,17 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		} catch (err) {
 			return res = utils.abort(400, err.stack || 'Error in `receive` method');
 		} finally {
-			// let foo = res!.clone();
-			// console.log('[ SHARD ][fetch] finally', foo.status, await foo.text());
 			if (res!.status !== 101) await this.#decrement(rid, gid);
+		}
+	}
+
+	async #emit(sender: ReqID, msg: Message) {
+		if (typeof msg === 'object') {
+			msg = JSON.stringify(msg);
+		}
+
+		for (let [rid, state] of this.pool) {
+			rid === sender || state.socket.send(msg);
 		}
 	}
 

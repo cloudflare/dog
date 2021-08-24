@@ -14,8 +14,8 @@ var ws = new WebSocket('ws://localhost:8787/ws');
 ws.onopen = function (ev) {
 	input.focus(); // form input
 	console.log('[ws][open]', ev);
-	toJSON('whoami');
 	toJSON('users:list');
+	toJSON('whoami');
 }
 
 ws.onmessage = function (ev) {
@@ -27,13 +27,12 @@ ws.onmessage = function (ev) {
 			// @ts-ignore
 			ws.uid = data.uid;
 			console.log('[ws][whoami]', data.uid);
+			announce(username, true); // self
 			return toJSON('joined');
 		}
 		case 'users:list': {
 			console.log('[ws][users:list]', data);
-			data.list.forEach(obj => {
-				draw_user(obj.uid, obj.name, true);
-			});
+			data.list.forEach(obj => new_user(obj.uid, obj.name));
 		}
 		case 'join': {
 			// via Room.onopen
@@ -48,16 +47,12 @@ ws.onmessage = function (ev) {
 		}
 		case 'joined': {
 			console.log('[ws][joined] "%s" has joined', data.user);
-			return draw_user(data.uid, data.user, true);
+			new_user(data.uid, data.user);
+			return announce(data.user, true);
 		}
 		case 'msg': {
 			console.log('[ws][msg] "%s" sent a message', data.user, data);
 			return message(data.user, data.text);
-		}
-		case 'count': {
-			console.log('[ws][count]', data.value);
-			if (data.value++ > 10) return console.log('STOP');
-			return toJSON(type, { value: data.value });
 		}
 		default: {
 			console.log(input);
@@ -111,20 +106,15 @@ function toggle_user(uid, online) {
 /**
  * @param {string} uid
  * @param {string} name
- * @param {boolean} [status]
  */
-function draw_user(uid, name, status) {
+function new_user(uid, name) {
 	let fig = document.createElement('figure');
 	let caption = document.createElement('figcaption');
 
 	fig.setAttribute('data-uid', uid);
 	caption.innerText = name;
 
-	if (status != null) {
-		announce(name, status);
-		fig.classList.toggle('online', !!status);
-	}
-
+	fig.classList.add('online');
 	fig.appendChild(caption);
 	aside.appendChild(fig);
 }
