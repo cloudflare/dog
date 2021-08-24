@@ -54,22 +54,16 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	 * @NOTE User must call `this.connect` for WS connection.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract receive(req: Request, reqid: ReqID): Promise<Response> | Response;
+	abstract receive(req: Request): Promise<Response> | Response;
 
 	// This request has connected via WS
-	abstract onopen?(socket: Socket): Promise<void> | void;
+	onopen?(socket: Socket): Promise<void> | void;
 	// A message was received
-	abstract onmessage?(socket: Socket, data: string): Promise<void> | void;
+	onmessage?(socket: Socket, data: string): Promise<void> | void;
 	// The connection was closed
-	abstract onclose?(socket: Socket): Promise<void> | void;
+	onclose?(socket: Socket): Promise<void> | void;
 	// The connection closed due to error
-	abstract onerror?(socket: Socket): Promise<void> | void;
-
-	// Another connection has joined the pool
-	// abstract onconnect?(socket: Socket): Promise<void> | void;
-
-	// Another connection has left the pool
-	// abstract ondisconnect?(socket: Socket): Promise<void> | void;
+	onerror?(socket: Socket): Promise<void> | void;
 
 	/**
 	 * Handle the WS connection upgrade
@@ -106,7 +100,8 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 			send: server.send.bind(server),
 			close: server.close.bind(server),
 			emit: (msg: Message) => {
-				broadcast(this.pool, msg, rid);
+				console.log('EMIT FROM:', socket.uid);
+				broadcast(this.pool, msg, socket.uid);
 			}
 		};
 
@@ -124,15 +119,17 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		server.addEventListener('close', closer);
 		server.addEventListener('error', closer);
 
-		if (this.onopen) {
-			await this.onopen(socket);
-		}
-
 		if (this.onmessage) {
+			console.log('HAD ONMESSAGE');
+
 			server.addEventListener('message', evt => {
-				console.log('[  RAW  ][message]', evt);
+				// console.log('[  RAW  ][message]', rid, evt);
 				this.onmessage!(socket, evt.data);
 			});
+		}
+
+		if (this.onopen) {
+			await this.onopen(socket);
 		}
 
 		this.pool.set(rid, {
@@ -152,7 +149,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	 */
 	async fetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
 		let request = new Request(input, init);
-		console.log('[ SHARD ][fetch] url', request.url);
+		// console.log('[ SHARD ][fetch] url', request.url);
 
 		try {
 			var { rid, gid } = utils.validate(request, this.uid);
@@ -160,18 +157,15 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 			return utils.abort(400, (err as Error).message);
 		}
 
-		// if existing connection, then reuse
-		// else establish new
-
 		let res: Response;
 
 		try {
-			return res = await this.receive(request, rid);
+			return res = await this.receive(request);
 		} catch (err) {
 			return res = utils.abort(400, err.stack || 'Error in `receive` method');
 		} finally {
-			let foo = res!.clone();
-			console.log('[ SHARD ][fetch] finally', foo.status, await foo.text());
+			// let foo = res!.clone();
+			// console.log('[ SHARD ][fetch] finally', foo.status, await foo.text());
 			if (res!.status !== 101) await this.#decrement(rid, gid);
 		}
 	}
