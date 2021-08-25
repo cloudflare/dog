@@ -11,7 +11,7 @@ const worker: ModuleWorker<Bindings> = {
 		// if (pathname !== '/') return new Response('Not Found', { status: 404 });
 
 		// ~> can have multiple gateway'd shards
-		let id = env.LOBBY.idFromName('lobby');
+		let id = env.LOBBY.idFromName('lobby-id');
 		let lobby = env.LOBBY.get(id);
 		return lobby.fetch(req);
 	}

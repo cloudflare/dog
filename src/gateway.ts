@@ -13,12 +13,15 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	public abstract limit: number;
 	public readonly target: DurableObjectNamespace;
 	private storage: DurableObjectStorage;
-	private current?: DurableObjectId;
+
+	private current?: string;
+	private sorted: string[];
 
 	constructor(state: DurableObjectState, env: T) {
 		this.storage = state.storage;
 		this.uid = state.id.toString();
 		this.target = this.link(env);
+		this.sorted = [];
 	}
 
 	/**
@@ -63,43 +66,77 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		console.log('[GATEWAY][fetch] rid', rid);
 
 		let shard: DurableObjectStub | void, alive: number | void;
-		let sid = await this.storage.get<string|void> (`rid:${rid}`) || this.current;
+		let sid = await this.storage.get<string|void>(`rid:${rid}`) || this.current || this.sorted[0];
 		if (sid != null) alive = await this.storage.get<number|void>(`sid:${sid}`);
 
-		console.log('[GATEWAY][fetch] storage', { sid, alive });
+		console.log('[GATEWAY][fetch] storage.exists', { sid, alive });
 
 		if (alive != null && this.limit >= ++alive) {
 			// use this shard if found & not over limit
 			console.log('IF-OK', { sid, limit: this.limit, alive });
 		} else {
-			// TODO: look at `this.list` for next available
-			// generate a new shard
-			console.log('ELSE', { sid, limit: this.limit });
-			sid = await this.clusterize(request).toString();
-			console.log('~> ELSE NEW:', { sid });
-			alive = 1;
+			console.log('ELSE', { sid, alive, limit: this.limit });
+
+			// if aware of existing shards, sort & get most free
+			// NOTE: `sync` only keeps buckets if `alive` <= limit
+			let pair = this.sorted.length > 0 && await this.#sort();
+
+			if (pair) {
+				sid = pair[0].substring(4);
+				alive = pair[1] + 1;
+			} else {
+				sid = await this.clusterize(request).toString();
+				console.log('~> ELSE NEW:', { sid });
+				this.sorted.unshift(sid); // front
+				alive = 1;
+			}
 		}
 
-		let shardid = sid!.toString();
-		shard = this.target.get(shardid);
+		this.current = (alive < this.limit) ? sid : undefined;
 
-		await this.storage.put<string>(`rid:${rid}`, shardid);
-		await this.storage.put<number>(`sid:${shardid}`, alive);
-		console.log('[GATEWAY][counter]', { sid: shardid, alive });
-
-		this.current = (alive < this.limit) ? shardid : undefined;
+		shard = this.target.get(sid);
+		await this.storage.put<string>(`rid:${rid}`, sid);
+		await this.storage.put<number>(`sid:${sid}`, alive);
+		console.log('[GATEWAY] storage.put', { sid, alive });
 
 		// Attach indentifiers / hash keys
 		request.headers.set(HEADERS.GATEWAYID, this.uid);
-		request.headers.set(HEADERS.SHARDID, shardid);
 		request.headers.set(HEADERS.CLIENTID, rid);
+		request.headers.set(HEADERS.SHARDID, sid);
 
-		let keys = await this.storage.list();
-		console.log({ keys });
-
-		// console.log('[GATEWAY][fetch] internal headers', [...request.headers]);
+		// let keys = await this.storage.list();
+		// console.log({ keys });
 
 		return shard.fetch(request);
+	}
+
+	/**
+	 * Sort all "sid:" entries by most available.
+	 * Save the sorted list as `this.sorted` property.
+	 * Return the most-available entry.
+	 */
+	async #sort(): Promise<[string, number] | void> {
+		console.log('[GATEWAY] SORTING');
+		let buckets = [...await this.storage.list<number>({ prefix: 'sid:' })];
+		if (buckets.length > 1) buckets.sort((a, b) => a[1] - b[1]);
+
+		// ignore shards >= limit
+		//   and only keep the IDs
+		let i=0, list: string[] = [];
+		let bucket: typeof buckets[0] | void;
+		for (; i < buckets.length; i++) {
+			if (buckets[i][1] < this.limit) {
+				if (!bucket) bucket = buckets[i];
+				list.push(buckets[i][0]);
+			}
+		}
+
+		this.sorted = list;
+
+		console.log('[GATEWAY] SORTING ~> DONE:', { list });
+		// console.log('[GATEWAY] SORTING ~> DONE:', { buckets, list });
+
+		return bucket;
 	}
 
 	async #close(req: Request): Promise<Response> {
@@ -112,12 +149,13 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		let alive = await this.storage.get<number>(key);
 		if (alive == null) throw new Error('Unknown: Shard ID');
 
-		// TODO: sort by availability
 		alive = Math.max(0, --alive);
 		await this.storage.put<number>(key, alive);
 		console.log('[GATEWAY][counter]', { sid, alive });
 
-		this.current = sid;
+		// sort by availability
+		let bucket = await this.#sort();
+		this.current = bucket ? bucket[0].substring(4) : undefined;
 
 		return new Response('OK');
 	}
