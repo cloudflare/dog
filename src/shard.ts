@@ -162,7 +162,8 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		try {
 			return res = await this.receive(request);
 		} catch (err) {
-			return res = utils.abort(400, err.stack || 'Error in `receive` method');
+			let stack = (err as Error).stack;
+			return res = utils.abort(400, stack || 'Error in `receive` method');
 		} finally {
 			if (res!.status !== 101) await this.#decrement(rid, gid);
 		}

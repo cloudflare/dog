@@ -38,7 +38,7 @@ interface Request {
 			certSKI: string;
 			certSerial: string;
 			certIssuerDN: string;
-			certVerified: 'SUCCESS' | 'NONE' | `FAILED:${infer string}`;
+			certVerified: 'SUCCESS' | 'NONE' | `FAILED:${string}`;
 			certNotAfter: string;
 			certSubjectDN: string;
 			certPresented: '0' | '1';
@@ -88,11 +88,11 @@ interface Request {
 // 	passThroughOnException: () => void;
 // }
 
-interface DurableObject<Environment extends ModuleWorker.Bindings = ModuleWorker.Bindings> {
-	state: DurableObjectState;
-	constructor(state: DurableObjectState, env: Environment): DurableObject;
-	fetch(request: Request): Promise<Response> | Response;
-}
+// interface DurableObject<Environment extends ModuleWorker.Bindings = ModuleWorker.Bindings> {
+// 	state: DurableObjectState;
+// 	constructor(state: DurableObjectState, env: Environment): DurableObject;
+// 	fetch(request: Request): Promise<Response> | Response;
+// }
 
 declare namespace ModuleWorker {
 	type Bindings = Record<string, KVNamespace | DurableObjectNamespace | string>;
