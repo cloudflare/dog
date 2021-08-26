@@ -5,10 +5,6 @@ import type { Bindings } from './types';
 export class Room extends Shard<Bindings> {
 	users = new Map<string, string>();
 
-	onconnect() {
-		console.log('user has joined');
-	}
-
 	link(env: Bindings) {
 		return env.LOBBY;
 	}
@@ -17,6 +13,7 @@ export class Room extends Shard<Bindings> {
 		console.log('[ HELLO ][receive] req.url', req.url);
 
 		let { pathname } = new URL(req.url);
+
 		if (pathname === '/ws') {
 			return this.connect(req);
 		}
