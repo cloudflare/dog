@@ -5,7 +5,8 @@ import * as utils from './internal/utils';
 import type { Shard, ShardID } from './shard';
 
 // NOTE: Private
-type BucketTuple = [`sid:${ShardID}`, number];
+type BucketKey = `sid:${ShardID}`;
+type BucketTuple = [BucketKey, number];
 
 // STORAGE: `rid:${rid}` => (string) sid
 // STORAGE: `sid:${sid}` => (number) "live"
@@ -147,7 +148,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		let sids = new Set<string>();
 		let tuples: BucketTuple[] = [];
 
-		let smap = await this.storage.list<number>({ prefix: 'sid:' });
+		let smap = await this.storage.list<number>({ prefix: 'sid:' }) as Map<BucketKey, number>;
 
 		for (let pair of smap) {
 			tuples.push(pair as BucketTuple);
@@ -160,7 +161,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 
 		// ignore buckets w/ active >= limit
 		//   and only keep the bucket IDs
-		let i=0, list: string[] = [];
+		let i=0, list: BucketKey[] = [];
 		let bucket: BucketTuple | void;
 		for (; i < tuples.length; i++) {
 			if (tuples[i][1] < this.limit) {
