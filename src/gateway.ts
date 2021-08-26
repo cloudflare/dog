@@ -2,25 +2,29 @@ import * as HEADERS from './internal/headers';
 import * as ROUTES from './internal/routes';
 import * as utils from './internal/utils';
 
-import type { Shard } from './shard';
+import type { Shard, ShardID } from './shard';
+
+// NOTE: Private
+type BucketTuple = [`sid:${ShardID}`, number];
 
 // STORAGE: `rid:${rid}` => (string) sid
 // STORAGE: `sid:${sid}` => (number) "live"
 
-// TODO: should even use storage?
 export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	public uid: string;
 	public abstract limit: number;
 	public readonly target: DurableObjectNamespace;
 	private storage: DurableObjectStorage;
 
-	private current?: string;
-	private sorted: string[];
+	private current?: ShardID;
+	private sorted: ShardID[];
+	private sids: Set<ShardID>;
 
 	constructor(state: DurableObjectState, env: T) {
 		this.storage = state.storage;
 		this.uid = state.id.toString();
 		this.target = this.link(env);
+		this.sids = new Set;
 		this.sorted = [];
 	}
 
@@ -87,7 +91,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 			} else {
 				sid = await this.clusterize(request).toString();
 				console.log('~> ELSE NEW:', { sid });
-				this.sorted.unshift(sid); // front
+				this.#welcome(sid); // no await!
 				alive = 1;
 			}
 		}
@@ -104,10 +108,32 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		request.headers.set(HEADERS.CLIENTID, rid);
 		request.headers.set(HEADERS.SHARDID, sid);
 
-		// let keys = await this.storage.list();
-		// console.log({ keys });
-
 		return shard.fetch(request);
+	}
+
+	/**
+	 * Notify existing SHARDs of a new neighbor.
+	 * @param {ShardID} nid  The newly created SHARD identifier.
+	 */
+	async #welcome(nid: ShardID): Promise<void> {
+		// get read-only copy
+		let items = [...this.sids];
+		this.sorted.unshift(nid);
+		this.sids.add(nid);
+
+		if (items.length > 0) {
+			await Promise.all(
+				items.map(sid => {
+					let headers = new Headers;
+					let stub = this.target.get(sid);
+					headers.set(HEADERS.SHARDID, sid);
+					headers.set(HEADERS.NEIGHBORID, nid);
+					headers.set(HEADERS.GATEWAYID, this.uid);
+					console.log('~> before fetch(neighbor)');
+					return stub.fetch(ROUTES.NEIGHBOR, { headers });
+				})
+			);
+		}
 	}
 
 	/**
@@ -115,22 +141,35 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	 * Save the sorted list as `this.sorted` property.
 	 * Return the most-available entry.
 	 */
-	async #sort(): Promise<[string, number] | void> {
+	async #sort(): Promise<BucketTuple | void> {
 		console.log('[GATEWAY] SORTING');
-		let buckets = [...await this.storage.list<number>({ prefix: 'sid:' })];
-		if (buckets.length > 1) buckets.sort((a, b) => a[1] - b[1]);
 
-		// ignore shards >= limit
-		//   and only keep the IDs
+		let sids = new Set<string>();
+		let tuples: BucketTuple[] = [];
+
+		let smap = await this.storage.list<number>({ prefix: 'sid:' });
+
+		for (let pair of smap) {
+			tuples.push(pair as BucketTuple);
+			sids.add(pair[0].substring(4));
+		}
+
+		if (tuples.length > 1) {
+			tuples.sort((a, b) => a[1] - b[1]);
+		}
+
+		// ignore buckets w/ active >= limit
+		//   and only keep the bucket IDs
 		let i=0, list: string[] = [];
-		let bucket: typeof buckets[0] | void;
-		for (; i < buckets.length; i++) {
-			if (buckets[i][1] < this.limit) {
-				if (!bucket) bucket = buckets[i];
-				list.push(buckets[i][0]);
+		let bucket: BucketTuple | void;
+		for (; i < tuples.length; i++) {
+			if (tuples[i][1] < this.limit) {
+				if (!bucket) bucket = tuples[i];
+				list.push(tuples[i][0]);
 			}
 		}
 
+		this.sids = sids;
 		this.sorted = list;
 
 		console.log('[GATEWAY] SORTING ~> DONE:', { list });

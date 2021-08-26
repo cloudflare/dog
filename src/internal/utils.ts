@@ -29,7 +29,8 @@ export function validate(req: Request, shardid?: string) {
 	let gid = req.headers.get(HEADERS.GATEWAYID);
 	if (gid == null) throw new Error('Missing: Gateway ID');
 
-	let rid = req.headers.get(HEADERS.CLIENTID);
+	let nid = req.headers.get(HEADERS.NEIGHBORID);
+	let rid = req.headers.get(HEADERS.CLIENTID) || nid;
 	if (rid == null) throw new Error('Missing: Request ID');
 
 	return { gid, rid, sid };

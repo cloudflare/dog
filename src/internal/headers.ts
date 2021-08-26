@@ -6,3 +6,6 @@ export const CLIENTID = 'x-dog-client-identifier';
 
 // The `Shard` durable object identifier
 export const SHARDID = 'x-dog-shard-identifier';
+
+// The `Shard` identifier that is broadcasting
+export const NEIGHBORID = 'x-dog-neighbor-identifier';

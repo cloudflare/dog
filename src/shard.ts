@@ -7,6 +7,8 @@ import type { Gateway } from './gateway';
 // ---
 
 export type ReqID = string;
+export type ShardID = string;
+
 export type Pool = Map<ReqID, State>;
 export type Message = JSON.Object | string;
 
@@ -26,11 +28,13 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	public readonly uid: string;
 
 	private readonly pool: Pool;
+	private readonly neighbors: Set<ShardID>;
 	private target: DurableObjectNamespace;
 
 	constructor(state: DurableObjectState, env: T) {
 		this.uid = state.id.toString();
 		this.target = this.link(env);
+		this.neighbors = new Set;
 		this.pool = new Map;
 	}
 
@@ -141,9 +145,16 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		// console.log('[ SHARD ][fetch] url', request.url);
 
 		try {
+			var { pathname } = new URL(request.url, 'foo://');
 			var { rid, gid } = utils.validate(request, this.uid);
 		} catch (err) {
 			return utils.abort(400, (err as Error).message);
+		}
+
+		if (pathname === ROUTES.NEIGHBOR) {
+			// rid === HEADERS.NEIGHBORID
+			this.neighbors.add(rid);
+			return new Response;
 		}
 
 		let res: Response;
