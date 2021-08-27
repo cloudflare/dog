@@ -5,9 +5,8 @@ import type { Bindings } from './types';
 export class Room extends Shard<Bindings> {
 	users = new Map<string, string>();
 
-	link(env: Bindings) {
-		return env.LOBBY;
-	}
+	link(env: Bindings) { return env.LOBBY }
+	self(env: Bindings) { return env.ROOM }
 
 	async receive(req: Request) {
 		console.log('[ HELLO ][receive] req.url', req.url);
@@ -24,7 +23,7 @@ export class Room extends Shard<Bindings> {
 	onopen(socket: Socket) {
 		console.log('[ HELLO ][onopen]');
 
-		socket.emit({
+		socket.broadcast({
 			type: 'join',
 			uid: socket.uid,
 		});
@@ -66,7 +65,7 @@ export class Room extends Shard<Bindings> {
 				})
 			);
 		} else {
-			socket.emit(input);
+			socket.broadcast(input);
 		}
 	}
 }

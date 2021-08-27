@@ -21,21 +21,24 @@ export interface Socket {
 	uid: ReqID;
 	send: WebSocket['send'];
 	close: WebSocket['close'];
+	broadcast(msg: Message): void;
 	emit(msg: Message): void;
 }
 
 export abstract class Shard<T extends ModuleWorker.Bindings> {
 	public readonly uid: string;
 
-	private readonly pool: Pool;
-	private readonly neighbors: Set<ShardID>;
-	private target: DurableObjectNamespace;
+	readonly #pool: Pool;
+	readonly #neighbors: Set<ShardID>;
+	#target: DurableObjectNamespace;
+	#ns: DurableObjectNamespace;
 
 	constructor(state: DurableObjectState, env: T) {
 		this.uid = state.id.toString();
-		this.target = this.link(env);
-		this.neighbors = new Set;
-		this.pool = new Map;
+		this.#target = this.link(env);
+		this.#ns = this.self(env);
+		this.#neighbors = new Set;
+		this.#pool = new Map;
 	}
 
 	/**
@@ -43,6 +46,12 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract link(bindings: T): DurableObjectNamespace & Gateway<T>;
+
+	/**
+	 * Self-identify the current `Shard` class.
+	 * @NOTE User-supplied logic/function.
+	 */
+	abstract self(bindings: T): DurableObjectNamespace & Shard<T>;
 
 	/**
 	 * Receive the HTTP request.
@@ -97,6 +106,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 			uid: rid,
 			send: server.send.bind(server),
 			close: server.close.bind(server),
+			broadcast: this.#broadcast.bind(this, gid, rid),
 			emit: this.#emit.bind(this, rid),
 		};
 
@@ -125,7 +135,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 			await this.onopen(socket);
 		}
 
-		this.pool.set(rid, {
+		this.#pool.set(rid, {
 			gateway: gid,
 			socket: server,
 		});
@@ -153,8 +163,18 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 		if (pathname === ROUTES.NEIGHBOR) {
 			// rid === HEADERS.NEIGHBORID
-			this.neighbors.add(rid);
+			this.#neighbors.add(rid);
 			return new Response;
+		}
+
+		if (pathname === ROUTES.BROADCAST) {
+			try {
+				this.#emit(rid, await request.text());
+				return new Response;
+			} catch (err) {
+				let msg = (err as Error).stack;
+				return utils.abort(400, msg || 'Error parsing broadcast message');
+			}
 		}
 
 		let res: Response;
@@ -169,14 +189,50 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 		}
 	}
 
-	async #emit(sender: ReqID, msg: Message) {
+	/**
+	 * Share a message ONLY with this Shard's connections
+	 */
+	#emit(sender: ReqID, msg: Message): void {
 		if (typeof msg === 'object') {
 			msg = JSON.stringify(msg);
 		}
 
-		for (let [rid, state] of this.pool) {
+		for (let [rid, state] of this.#pool) {
 			rid === sender || state.socket.send(msg);
 		}
+	}
+
+	/**
+	 * Share a message across ALL shards w/in group
+	 */
+	async #broadcast(gateway: string, sender: ReqID, msg: Message): Promise<void> {
+		let body = typeof msg === 'object'
+			? JSON.stringify(msg)
+			: msg;
+
+		this.#emit(sender, body);
+
+		let list = [...this.#neighbors];
+		if (list.length < 1) return;
+
+		let commons = {
+			[HEADERS.GATEWAYID]: gateway,
+			[HEADERS.NEIGHBORID]: this.uid,
+			[HEADERS.CLIENTID]: sender,
+		};
+
+		await Promise.all(
+			list.map(sid => {
+				let stub = this.#ns.get(sid);
+				let headers = new Headers(commons);
+				headers.set(HEADERS.SHARDID, sid);
+				return stub.fetch(ROUTES.BROADCAST, {
+					method: 'POST',
+					headers,
+					body,
+				});
+			})
+		);
 	}
 
 	/**
@@ -185,7 +241,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	async #decrement(rid: ReqID, gid: string) {
 		console.log('[ SHARD ][#decrement]', { gid, rid });
 
-		this.pool.delete(rid);
+		this.#pool.delete(rid);
 
 		let headers = new Headers;
 		headers.set(HEADERS.GATEWAYID, gid);
@@ -194,7 +250,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 		// Prepare internal request
 		// ~> notify Gateway of -1 count
-		let gateway = this.target.get(gid);
+		let gateway = this.#target.get(gid);
 		await gateway.fetch(ROUTES.CLOSE, { headers });
 	}
 }

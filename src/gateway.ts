@@ -124,17 +124,27 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 
 		if (items.length > 0) {
 			await Promise.all(
-				items.map(sid => {
-					let headers = new Headers;
-					let stub = this.target.get(sid);
-					headers.set(HEADERS.SHARDID, sid);
-					headers.set(HEADERS.NEIGHBORID, nid);
-					headers.set(HEADERS.GATEWAYID, this.uid);
-					console.log('~> before fetch(neighbor)');
-					return stub.fetch(ROUTES.NEIGHBOR, { headers });
-				})
+				items.map(sid => Promise.all([
+					this.#introduce(nid, sid),
+					this.#introduce(sid, nid),
+				]))
 			);
 		}
+	}
+
+	/**
+	 * Introduce `stranger` to the existing `target` shard.
+	 */
+	#introduce(stranger: ShardID, target: ShardID): Promise<Response> {
+		console.log('[GATEWAY] introducing "%s" to "%s"', stranger, target);
+
+		let headers = new Headers;
+		headers.set(HEADERS.SHARDID, target);
+		headers.set(HEADERS.NEIGHBORID, stranger);
+		headers.set(HEADERS.GATEWAYID, this.uid);
+
+		let stub = this.target.get(target);
+		return stub.fetch(ROUTES.NEIGHBOR, { headers });
 	}
 
 	/**
