@@ -13,6 +13,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
+    "build": "node bin/build",
     "types": "tsc --noEmit"
   },
   "devDependencies": {
