@@ -30,3 +30,9 @@ jobs:
 
     - name: Compile
       run: pnpm run build
+
+    - name: (example) Type Check
+      run: yarn --cwd example types
+
+    - name: (example) Compile
+      run: yarn --cwd example build
