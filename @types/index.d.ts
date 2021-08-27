@@ -96,13 +96,6 @@ interface ResponseInit {
 
 // ---
 
-declare namespace JSON {
-	type Value = Date | RegExp | string | number | boolean | null | JSON.Object;
-	type Object = JSON.Value[] | { [key: string]: JSON.Value };
-}
-
-// ---
-
 declare namespace ModuleWorker {
 	type Bindings = Record<string, KVNamespace | DurableObjectNamespace | CryptoKey | string>;
 

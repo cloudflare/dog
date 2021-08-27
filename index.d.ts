@@ -1,5 +1,10 @@
+// TODO: tbd
+declare namespace JSON {
+	type Value = Date | RegExp | string | number | boolean | null | JSON.Object;
+	type Object = JSON.Value[] | { [key: string]: JSON.Value };
+}
+
 // TODO: support arraybuffer types
-// TODO: JSON is inherited from source
 export type Message = JSON.Object | string;
 
 export interface State {
