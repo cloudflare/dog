@@ -1,24 +1,28 @@
 {
-	"compilerOptions": {
+  "compilerOptions": {
     "strict": true,
     "target": "es2020",
     "alwaysStrict": true,
-		"esModuleInterop": false,
+    "esModuleInterop": false,
     "moduleResolution": "node",
     "lib": ["es2020", "webworker"],
     "types": ["@cloudflare/workers-types"],
     "forceConsistentCasingInFileNames": true,
     "importsNotUsedAsValues": "error",
     "strictFunctionTypes": true,
-		"resolveJsonModule": true,
+    "resolveJsonModule": true,
     "strictNullChecks": true,
-		"isolatedModules": true,
+    "isolatedModules": true,
     "noImplicitThis": true,
     "noImplicitAny": true,
     "module": "es2020",
-		"allowJs": false
-	},
-	"include": [
+    "allowJs": false,
+    "baseUrl": ".",
+    "paths": {
+      "dog": ["index.d.ts"]
+    }
+  },
+  "include": [
     "@types",
     "src"
   ]

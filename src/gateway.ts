@@ -2,7 +2,8 @@ import * as HEADERS from './internal/headers';
 import * as ROUTES from './internal/routes';
 import * as utils from './internal/utils';
 
-import type { Shard, ShardID } from './shard';
+import type { ReqID, ShardID } from './shard';
+import type * as DOG from 'dog';
 
 // NOTE: Private
 type BucketKey = `sid:${ShardID}`;
@@ -11,35 +12,36 @@ type BucketTuple = [BucketKey, number];
 // STORAGE: `rid:${rid}` => (string) sid
 // STORAGE: `sid:${sid}` => (number) "live"
 
-export abstract class Gateway<T extends ModuleWorker.Bindings> {
-	public uid: string;
+export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Gateway<T> {
 	public abstract limit: number;
-	public readonly target: DurableObjectNamespace;
-	private storage: DurableObjectStorage;
 
-	private current?: ShardID;
-	private sorted: ShardID[];
-	private sids: Set<ShardID>;
+	public readonly uid: string;
+	public readonly target: DurableObjectNamespace;
+
+	#current?: ShardID;
+	#storage: DurableObjectStorage;
+	#sorted: ShardID[];
+	#sids: Set<ShardID>;
 
 	constructor(state: DurableObjectState, env: T) {
-		this.storage = state.storage;
+		this.#storage = state.storage;
 		this.uid = state.id.toString();
 		this.target = this.link(env);
-		this.sids = new Set;
-		this.sorted = [];
+		this.#sids = new Set;
+		this.#sorted = [];
 	}
 
 	/**
 	 * Specify which `Shard` class extension is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract link(bindings: T): DurableObjectNamespace & Shard<T>;
+	abstract link(bindings: T): DurableObjectNamespace & DOG.Shard<T>;
 
 	/**
 	 * Generate a unique identifier for the request.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract identify(req: Request): Promise<string> | string;
+	abstract identify(req: Request): Promise<ReqID> | ReqID;
 
 	/**
 	 * Generate a `DurableObjectId` for the shard cluster
@@ -71,8 +73,8 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		console.log('[GATEWAY][fetch] rid', rid);
 
 		let shard: DurableObjectStub | void, alive: number | void;
-		let sid = await this.storage.get<string|void>(`rid:${rid}`) || this.current || this.sorted[0];
-		if (sid != null) alive = await this.storage.get<number|void>(`sid:${sid}`);
+		let sid = await this.#storage.get<string|void>(`rid:${rid}`) || this.#current || this.#sorted[0];
+		if (sid != null) alive = await this.#storage.get<number|void>(`sid:${sid}`);
 
 		console.log('[GATEWAY][fetch] storage.exists', { sid, alive });
 
@@ -84,7 +86,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 
 			// if aware of existing shards, sort & get most free
 			// NOTE: `sync` only keeps buckets if `alive` <= limit
-			let pair = this.sorted.length > 0 && await this.#sort();
+			let pair = this.#sorted.length > 0 && await this.#sort();
 
 			if (pair) {
 				sid = pair[0].substring(4);
@@ -97,11 +99,11 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 			}
 		}
 
-		this.current = (alive < this.limit) ? sid : undefined;
+		this.#current = (alive < this.limit) ? sid : undefined;
 
 		shard = this.target.get(sid);
-		await this.storage.put<string>(`rid:${rid}`, sid);
-		await this.storage.put<number>(`sid:${sid}`, alive);
+		await this.#storage.put<string>(`rid:${rid}`, sid);
+		await this.#storage.put<number>(`sid:${sid}`, alive);
 		console.log('[GATEWAY] storage.put', { sid, alive });
 
 		// Attach indentifiers / hash keys
@@ -118,9 +120,9 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	 */
 	async #welcome(nid: ShardID): Promise<void> {
 		// get read-only copy
-		let items = [...this.sids];
-		this.sorted.unshift(nid);
-		this.sids.add(nid);
+		let items = [...this.#sids];
+		this.#sorted.unshift(nid);
+		this.#sids.add(nid);
 
 		if (items.length > 0) {
 			await Promise.all(
@@ -156,7 +158,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		let sids = new Set<string>();
 		let tuples: BucketTuple[] = [];
 
-		let smap = await this.storage.list<number>({ prefix: 'sid:' }) as Map<BucketKey, number>;
+		let smap = await this.#storage.list<number>({ prefix: 'sid:' }) as Map<BucketKey, number>;
 
 		for (let pair of smap) {
 			tuples.push(pair as BucketTuple);
@@ -178,8 +180,8 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 			}
 		}
 
-		this.sids = sids;
-		this.sorted = list;
+		this.#sids = sids;
+		this.#sorted = list;
 
 		console.log('[GATEWAY] SORTING ~> DONE:', { list });
 		// console.log('[GATEWAY] SORTING ~> DONE:', { buckets, list });
@@ -191,19 +193,19 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 		var { rid, sid, gid } = utils.validate(req);
 		if (gid !== this.uid) throw new Error('Mismatch: Gateway ID');
 
-		await this.storage.delete(`rid:${rid}`);
+		await this.#storage.delete(`rid:${rid}`);
 
 		let key = `sid:${sid}`;
-		let alive = await this.storage.get<number>(key);
+		let alive = await this.#storage.get<number>(key);
 		if (alive == null) throw new Error('Unknown: Shard ID');
 
 		alive = Math.max(0, --alive);
-		await this.storage.put<number>(key, alive);
+		await this.#storage.put<number>(key, alive);
 		console.log('[GATEWAY][counter]', { sid, alive });
 
 		// sort by availability
 		let bucket = await this.#sort();
-		this.current = bucket ? bucket[0].substring(4) : undefined;
+		this.#current = bucket ? bucket[0].substring(4) : undefined;
 
 		return new Response('OK');
 	}

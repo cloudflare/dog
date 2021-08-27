@@ -2,30 +2,16 @@ import * as utils from './internal/utils';
 import * as ROUTES from './internal/routes';
 import * as HEADERS from './internal/headers';
 
-import type { Gateway } from './gateway';
+import type * as DOG from 'dog';
 
 // ---
 
 export type ReqID = string;
 export type ShardID = string;
 
-export type Pool = Map<ReqID, State>;
-export type Message = JSON.Object | string;
+type Pool = Map<ReqID, DOG.State>;
 
-export interface State {
-	gateway: string;
-	socket: WebSocket;
-}
-
-export interface Socket {
-	uid: ReqID;
-	send: WebSocket['send'];
-	close: WebSocket['close'];
-	broadcast(msg: Message): Promise<void>;
-	emit(msg: Message): void;
-}
-
-export abstract class Shard<T extends ModuleWorker.Bindings> {
+export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shard<T> {
 	public readonly uid: string;
 
 	readonly #pool: Pool;
@@ -45,7 +31,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	 * Specify which `Gateway` class is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract link(bindings: T): DurableObjectNamespace & Gateway<T>;
+	abstract link(bindings: T): DurableObjectNamespace & DOG.Gateway<T>;
 
 	/**
 	 * Self-identify the current `Shard` class.
@@ -61,16 +47,16 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	abstract receive(req: Request): Promise<Response> | Response;
 
 	// This request has connected via WS
-	onopen?(socket: Socket): Promise<void> | void;
+	onopen?(socket: DOG.Socket): Promise<void> | void;
 
 	// A message was received
-	onmessage?(socket: Socket, data: string): Promise<void> | void;
+	onmessage?(socket: DOG.Socket, data: string): Promise<void> | void;
 
 	// The connection was closed
-	onclose?(socket: Socket): Promise<void> | void;
+	onclose?(socket: DOG.Socket): Promise<void> | void;
 
 	// The connection closed due to error
-	onerror?(socket: Socket): Promise<void> | void;
+	onerror?(socket: DOG.Socket): Promise<void> | void;
 
 	/**
 	 * Handle the WS connection upgrade
@@ -102,7 +88,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 		server.accept();
 
-		let socket: Socket = {
+		let socket: DOG.Socket = {
 			uid: rid,
 			send: server.send.bind(server),
 			close: server.close.bind(server),
@@ -192,7 +178,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	/**
 	 * Share a message ONLY with this Shard's connections
 	 */
-	#emit(sender: ReqID, msg: Message): void {
+	#emit(sender: ReqID, msg: DOG.Message): void {
 		if (typeof msg === 'object') {
 			msg = JSON.stringify(msg);
 		}
@@ -205,7 +191,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	/**
 	 * Share a message across ALL shards w/in group
 	 */
-	async #broadcast(gateway: string, sender: ReqID, msg: Message): Promise<void> {
+	async #broadcast(gateway: string, sender: ReqID, msg: DOG.Message): Promise<void> {
 		let body = typeof msg === 'object'
 			? JSON.stringify(msg)
 			: msg;
