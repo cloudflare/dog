@@ -1,6 +1,6 @@
-import { Shard } from '$lib/index';
-import type { Socket } from '$lib/index';
+import { Shard } from 'dog';
 import type { Bindings } from './types';
+import type { Socket } from 'dog';
 
 export class Room extends Shard<Bindings> {
 	users = new Map<string, string>();

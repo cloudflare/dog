@@ -1,4 +1,4 @@
-import { Gateway } from '$lib/index';
+import { Gateway } from 'dog';
 import { SHA256 } from 'worktop/crypto';
 
 import type { Bindings } from './types';

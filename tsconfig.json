@@ -16,15 +16,10 @@
     "noImplicitThis": true,
     "noImplicitAny": true,
     "module": "es2020",
-		"allowJs": false,
-		"baseUrl": ".",
-		"paths": {
-			"$lib/*": ["src/*"]
-		}
+		"allowJs": false
 	},
 	"include": [
     "@types",
-    "example",
     "src"
   ]
 }

@@ -1,4 +1,4 @@
-import type { Gateway, Shard } from '$lib/index';
+import type { Gateway, Shard } from 'dog';
 
 // TODO: Remove the intersection types?
 export interface Bindings extends ModuleWorker.Bindings {
