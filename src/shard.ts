@@ -21,7 +21,7 @@ export interface Socket {
 	uid: ReqID;
 	send: WebSocket['send'];
 	close: WebSocket['close'];
-	broadcast(msg: Message): void;
+	broadcast(msg: Message): Promise<void>;
 	emit(msg: Message): void;
 }
 

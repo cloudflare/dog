@@ -136,8 +136,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	 * Introduce `stranger` to the existing `target` shard.
 	 */
 	#introduce(stranger: ShardID, target: ShardID): Promise<Response> {
-		console.log('[GATEWAY] introducing "%s" to "%s"', stranger, target);
-
 		let headers = new Headers;
 		headers.set(HEADERS.SHARDID, target);
 		headers.set(HEADERS.NEIGHBORID, stranger);
