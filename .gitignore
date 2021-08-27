@@ -4,5 +4,5 @@ node_modules
 *.lock
 *.log
 
-/build
 /index.js
+/example/build

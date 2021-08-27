@@ -1,9 +1,10 @@
 {
   "private": true,
-  "type": "module",
+  "name": "dog",
   "version": "0.0.0",
   "module": "index.js",
   "types": "index.d.ts",
+  "type": "module",
   "files": [
     "index.d.ts",
     "index.js"

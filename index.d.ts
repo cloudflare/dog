@@ -21,7 +21,7 @@ export interface Socket {
 }
 
 // TODO: ModuleWorker is inherited from source
-export declare abstract class Shard<T extends ModuleWorker.Bindings> {
+export abstract class Shard<T extends ModuleWorker.Bindings> {
 	readonly uid: string;
 	constructor(state: DurableObjectState, env: T);
 
@@ -56,7 +56,7 @@ export declare abstract class Shard<T extends ModuleWorker.Bindings> {
 	fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
 }
 
-export declare abstract class Gateway<T extends ModuleWorker.Bindings> {
+export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	abstract limit: number;
 	readonly target: DurableObjectNamespace;
 	readonly uid: string;
