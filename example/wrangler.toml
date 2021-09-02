@@ -5,13 +5,13 @@ workers_dev = true
 account_id = ""
 
 [build]
-command = "npm run build:example"
-watch_dir = "./example"
+command = "npm run build"
+watch_dir = "worker"
 
 [build.upload]
-dir = "build"
 format = "modules"
 main = "./index.js"
+dir = "build"
 
 [durable_objects]
 bindings = [
