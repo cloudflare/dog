@@ -2,6 +2,15 @@ import { Shard } from 'dog';
 import type { Bindings } from './types';
 import type { Socket } from 'dog';
 
+type Message = {
+	uid: string;
+	type: string;
+};
+
+type MessageData =
+	| { type: 'whoami'; user?: string }
+	| { type: 'msg'; user: string; text: string };
+
 export class Room extends Shard<Bindings> {
 	users = new Map<string, string>();
 
@@ -32,7 +41,7 @@ export class Room extends Shard<Bindings> {
 	onclose(socket: Socket) {
 		console.log('[ HELLO ][onclose]');
 
-		socket.emit({
+		socket.broadcast({
 			type: 'exit',
 			uid: socket.uid,
 			user: this.users.get(socket.uid)!
@@ -43,7 +52,7 @@ export class Room extends Shard<Bindings> {
 
 	onmessage(socket: Socket, data: string) {
 		// raw broadcast channel
-		let input = JSON.parse(data);
+		let input = JSON.parse(data) as Message & MessageData;
 		console.log('[room] onmessage', input);
 		input.uid = input.uid || socket.uid;
 
@@ -58,14 +67,33 @@ export class Room extends Shard<Bindings> {
 				arr.push({ uid, name });
 			}
 
-			socket.send(
+			return socket.send(
 				JSON.stringify({
 					type: 'users:list',
 					list: arr,
 				})
 			);
-		} else {
-			socket.broadcast(input);
 		}
+
+		if (input.type === 'msg') {
+			let text = input.text.trim();
+
+			// slash commands~!
+			// ---
+
+			if (text.startsWith('/group ')) {
+				input.text = text.substring(7);
+				return socket.emit(input);
+			}
+
+			if (text.startsWith('/all ')) {
+				input.text = text.substring(5)
+			}
+
+			return socket.broadcast(input);
+		}
+
+		// catch all: broadcast
+		socket.broadcast(input);
 	}
 }
