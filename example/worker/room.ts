@@ -8,11 +8,18 @@ type Message = {
 };
 
 type MessageData =
-	| { type: 'whoami'; user?: string }
-	| { type: 'msg'; user: string; text: string };
+	| { type: 'req:connected' }
+	| { type: 'req:user:list' }
+	| { type: 'msg'; text: string };
+
+type Output = {
+	type: string;
+	from?: string;
+	time: number;
+}
 
 export class Room extends Shard<Bindings> {
-	users = new Map<string, string>();
+	users = new Map<string, number>();
 
 	link(env: Bindings) { return env.LOBBY }
 	self(env: Bindings) { return env.ROOM }
@@ -30,23 +37,28 @@ export class Room extends Shard<Bindings> {
 	}
 
 	onopen(socket: Socket) {
-		console.log('[ HELLO ][onopen]');
+		console.log('[ HELLO ][onopen]', socket.uid);
 
-		socket.broadcast({
-			type: 'join',
-			uid: socket.uid,
-		});
+		let output: Output = {
+			type: 'user:join',
+			from: socket.uid,
+			time: Date.now(),
+		};
+
+		socket.broadcast(output, true);
+		this.users.set(socket.uid, output.time);
 	}
 
 	onclose(socket: Socket) {
 		console.log('[ HELLO ][onclose]');
 
-		socket.broadcast({
-			type: 'exit',
-			uid: socket.uid,
-			user: this.users.get(socket.uid)!
-		});
+		let output: Output = {
+			type: 'user:exit',
+			from: socket.uid,
+			time: Date.now(),
+		}
 
+		socket.broadcast(output);
 		this.users.delete(socket.uid);
 	}
 
@@ -56,44 +68,61 @@ export class Room extends Shard<Bindings> {
 		console.log('[room] onmessage', input);
 		input.uid = input.uid || socket.uid;
 
-		if (input.type === 'whoami') {
-			// save the `uid`: `name` association
-			this.users.set(input.uid, input.user || 'anon');
-			socket.send(JSON.stringify(input));
-
-			// send down a list of all connected users
-			let arr = [];
-			for (let [uid, name] of this.users) {
-				arr.push({ uid, name });
+		if (input.type === 'req:connected') {
+			let output: Output = {
+				type: 'user:connected',
+				from: input.uid,
+				time: Date.now(),
 			}
+			// save the `uid`::Date association
+			this.users.set(input.uid, output.time);
+			return socket.broadcast(JSON.stringify(output), true);
+		}
+
+		// send down a list of all connected users
+		if (input.type === 'req:user:list') {
+			let output: Output & { list: string[] } = {
+				type: 'user:list',
+				list: [...this.users.keys()],
+				time: Date.now(),
+			};
 
 			return socket.send(
-				JSON.stringify({
-					type: 'users:list',
-					list: arr,
-				})
+				JSON.stringify(output)
 			);
 		}
 
 		if (input.type === 'msg') {
 			let text = input.text.trim();
 
+			let output: Output & { text: string } = {
+				type: 'user:msg',
+				from: socket.uid,
+				text: text,
+				time: Date.now(),
+			}
+
 			// slash commands~!
 			// ---
 
-			if (text.startsWith('/group ')) {
-				input.text = text.substring(7);
-				return socket.emit(input);
+			let match: RegExpExecArray | null;
+
+			// group chat: "/group <text>" || "/g <text>"
+			if (match = /^([/](?:g|group)\s+)/.exec(text)) {
+				output.text = text.substring(match[1].length);
+				return socket.emit(output, true);
 			}
 
-			if (text.startsWith('/all ')) {
-				input.text = text.substring(5)
+			// all chat (default): "/all <text>" || "/a <text>"
+			if (match = /^([/](?:a|all)\s+)/.exec(text)) {
+				output.text = text.substring(match[1].length);
+				return socket.broadcast(output, true);
 			}
 
-			return socket.broadcast(input);
+			return socket.broadcast(output, true);
 		}
 
 		// catch all: broadcast
-		socket.broadcast(input);
+		socket.broadcast(input, true);
 	}
 }

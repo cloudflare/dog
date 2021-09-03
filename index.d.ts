@@ -16,8 +16,8 @@ export interface Socket {
 	uid: string;
 	send: WebSocket['send'];
 	close: WebSocket['close'];
-	broadcast(msg: Message): Promise<void>;
-	emit(msg: Message): void;
+	emit(msg: Message, self?: boolean): void;
+	broadcast(msg: Message, self?: boolean): Promise<void>;
 }
 
 // TODO: ModuleWorker is inherited from source

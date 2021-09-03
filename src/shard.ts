@@ -178,25 +178,25 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	/**
 	 * Share a message ONLY with this Shard's connections
 	 */
-	#emit(sender: ReqID, msg: DOG.Message): void {
+	#emit(sender: ReqID, msg: DOG.Message, self?: boolean): void {
 		if (typeof msg === 'object') {
 			msg = JSON.stringify(msg);
 		}
 
 		for (let [rid, state] of this.#pool) {
-			rid === sender || state.socket.send(msg);
+			if (self || rid !== sender) state.socket.send(msg);
 		}
 	}
 
 	/**
 	 * Share a message across ALL shards w/in group
 	 */
-	async #broadcast(gateway: string, sender: ReqID, msg: DOG.Message): Promise<void> {
+	async #broadcast(gateway: string, sender: ReqID, msg: DOG.Message, self?: boolean): Promise<void> {
 		let body = typeof msg === 'object'
 			? JSON.stringify(msg)
 			: msg;
 
-		this.#emit(sender, body);
+		this.#emit(sender, body, self);
 
 		let list = [...this.#neighbors];
 		if (list.length < 1) return;

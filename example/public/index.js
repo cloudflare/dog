@@ -8,57 +8,48 @@ var aside = $('aside');
 var input = $('input');
 
 // @ts-ignore
-var username = window.NAME;
-var ws = new WebSocket(`ws://localhost:8787/ws?u=${username}`);
+var uid = window.NAME;
+var ws = new WebSocket(`ws://localhost:8787/ws?u=${uid}`);
 var users = [];
 
 ws.onopen = function (ev) {
 	input.focus(); // form input
 	console.log('[ws][open]', ev);
-	toJSON('users:list');
-	toJSON('whoami');
+	toJSON('req:user:list');
+	toJSON('req:connected');
 }
 
 ws.onmessage = function (ev) {
 	let input = JSON.parse(ev.data);
 	let { type, ...data } = input;
 
+	console.log('[MESSAGE]', input);
+
 	switch (type) {
-		case 'whoami': {
-			// @ts-ignore
-			ws.uid = data.uid;
-			console.log('[ws][whoami]', data.uid);
-			announce(username, true); // self
-			return toJSON('joined');
+		case 'user:list': {
+			users = data.list;
+			// TODO: ^merge/gossip
+			return users.forEach(new_user);
 		}
-		case 'users:list': {
-			if (data.list) (users = data.list).forEach(obj => {
-				new_user(obj.uid, obj.name);
-			});
-			return console.log('[ws][users:list]', data);
+		case 'user:join': {
+			new_user(data.from);
+			users.push(data.from);
+			return announce(data.from, 'joined');
 		}
-		case 'join': {
-			// via Room.onopen
-			console.log('[ws][join]', data);
-			return toggle_user(data.uid, true);
+		case 'user:connected': {
+			toggle_user(data.from, true);
+			return announce(data.from, 'connected');
 		}
-		case 'exit': {
+		case 'user:exit': {
 			// via Room.onclose
-			console.log('[ws][exit] "%s" has joined', data.user)
-			toggle_user(data.uid, false);
-			return announce(data.user, false);
+			toggle_user(data.from, false);
+			return announce(data.from, 'left');
 		}
-		case 'joined': {
-			console.log('[ws][joined] "%s" has joined', data.user);
-			new_user(data.uid, data.user);
-			return announce(data.user, true);
-		}
-		case 'msg': {
-			console.log('[ws][msg] "%s" sent a message', data.user, data);
-			return message(data.user, data.text);
+		case 'user:msg': {
+			return message(data.from, data.text);
 		}
 		default: {
-			console.log(input);
+			console.log('DEFAULT', input);
 			break;
 		}
 	}
@@ -66,9 +57,9 @@ ws.onmessage = function (ev) {
 
 ws.onclose = ws.onerror = function (ev) {
 	console.log('[ws][%s]', ev.type, ev);
-	users.forEach(obj => {
-		announce(obj.name, false);
-		toggle_user(obj.uid, false);
+	users.forEach(str => {
+		announce(str, 'left');
+		toggle_user(str, false);
 	});
 }
 
@@ -82,7 +73,7 @@ form.onsubmit = function (ev) {
 	input.value = '';
 
 	// draw own message
-	message(username, text);
+	// message(uid, text);
 }
 
 /**
@@ -90,32 +81,32 @@ form.onsubmit = function (ev) {
  * @param {object} [data]
  */
 function toJSON(type, data={}) {
-	// @ts-ignore
-	data.uid = ws.uid;
-	data.user = username;
+	data.user = uid;
 	data.type = type;
 	ws.send(JSON.stringify(data));
 }
 
 /**
- * @param {string} uid
+ * @param {string} user
  * @param {boolean} online
  */
-function toggle_user(uid, online) {
-	let fig = aside.querySelector(`figure[data-uid="${uid}"]`);
+function toggle_user(user, online) {
+	let fig = aside.querySelector(`figure[data-user="${user}"]`);
 	if (fig) fig.classList.toggle('online', online);
 }
 
 /**
- * @param {string} uid
- * @param {string} name
+ * @param {string} username
  */
-function new_user(uid, name) {
-	let fig = document.createElement('figure');
+function new_user(username) {
+	let fig = aside.querySelector(`figure[data-user="${username}"]`);
+	if (fig) return;
+
+	fig = document.createElement('figure');
 	let caption = document.createElement('figcaption');
 
-	fig.setAttribute('data-uid', uid);
-	caption.innerText = name;
+	fig.setAttribute('data-user', username);
+	caption.innerText = username;
 
 	fig.classList.add('online');
 	fig.appendChild(caption);
@@ -124,11 +115,11 @@ function new_user(uid, name) {
 
 /**
  * @param {string} name
- * @param {boolean} online
+ * @param {string} action
  */
-function announce(name, online) {
+function announce(name, action) {
 	let div = document.createElement('div');
-	div.innerText = `${name} has ${online ? 'joined' : 'left'}`;
+	div.innerText = `${name} has ${action}`;
 	div.className = 'announce';
 	chat.appendChild(div);
 }
