@@ -19,6 +19,11 @@ interface Dispatch {
 	body: string;
 }
 
+// internal : send message to all websockets
+function send(conns: Set<WebSocket>, msg: string) {
+	for (let ws of conns) ws.send(msg);
+}
+
 export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shard<T> {
 	public readonly uid: string;
 
@@ -90,7 +95,6 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			return utils.abort(400, (err as Error).message);
 		}
 
-		// TODO: check for `conn.get(rid)` here?
 		let { 0: client, 1: server } = new WebSocketPair;
 
 		server.accept();
@@ -109,8 +113,19 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 				if (evt.type === 'error' && this.onerror) await this.onerror(socket);
 				else if (this.onclose) await this.onclose(socket);
 			} finally {
-				console.error('[ SHARD ][closer][finally]', { gid, rid });
-				await this.#decrement(rid, gid);
+				let state = this.#pool.get(rid);
+				let isEmpty: boolean;
+
+				if (!state || state.socket.size < 2) {
+					this.#pool.delete(rid);
+					isEmpty = true;
+				} else {
+					state.socket.delete(server);
+					this.#pool.set(rid, state);
+					isEmpty = false;
+				}
+
+				await this.#close(rid, gid, isEmpty);
 				server.close();
 			}
 		}
@@ -129,10 +144,13 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			await this.onopen(socket);
 		}
 
-		this.#pool.set(rid, {
+		let state: DOG.State = this.#pool.get(rid) || {
 			gateway: gid,
-			socket: server,
-		});
+			socket: new Set,
+		};
+
+		state.socket.add(server);
+		this.#pool.set(rid, state);
 
 		return new Response(null, {
 			status: 101,
@@ -176,7 +194,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 				if (!tid) throw new Error('Missing: Target ID');
 
 				let state = this.#pool.get(tid);
-				if (state) state.socket.send(await request.text());
+				if (state) send(state.socket, await request.text());
 
 				return new Response;
 			} catch (err) {
@@ -193,7 +211,9 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			let stack = (err as Error).stack;
 			return res = utils.abort(400, stack || 'Error in `receive` method');
 		} finally {
-			if (res!.status !== 101) await this.#decrement(rid, gid);
+			if (res!.status !== 101) {
+				await this.#close(rid, gid, true);
+			}
 		}
 	}
 
@@ -206,7 +226,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 		}
 
 		for (let [rid, state] of this.#pool) {
-			if (self || rid !== sender) state.socket.send(msg);
+			if (self || rid !== sender) send(state.socket, msg);
 		}
 	}
 
@@ -269,7 +289,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			: msg;
 
 		let state = this.#pool.get(target);
-		if (state) return state.socket.send(body);
+		if (state) return send(state.socket, body);
 
 		await this.#dispatch({
 			gateway, sender, target, body,
@@ -280,15 +300,14 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	/**
 	 * Tell relevant Gateway object to -1 its count
 	 */
-	async #decrement(rid: ReqID, gid: string) {
-		console.log('[ SHARD ][#decrement]', { gid, rid });
-
-		this.#pool.delete(rid);
+	async #close(rid: ReqID, gid: string, isEmpty: boolean) {
+		console.log('[ SHARD ][#close]', { gid, rid });
 
 		let headers = new Headers;
 		headers.set(HEADERS.GATEWAYID, gid);
 		headers.set(HEADERS.SHARDID, this.uid);
 		headers.set(HEADERS.CLIENTID, rid);
+		headers.set(HEADERS.ISEMPTY, isEmpty ? '1' : '0');
 
 		// Prepare internal request
 		// ~> notify Gateway of -1 count

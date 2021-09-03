@@ -195,8 +195,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		var { rid, sid, gid } = utils.validate(req);
 		if (gid !== this.uid) throw new Error('Mismatch: Gateway ID');
 
-		await this.#storage.delete(`rid:${rid}`);
-
 		let key = `sid:${sid}`;
 		let alive = await this.#storage.get<number>(key);
 		if (alive == null) throw new Error('Unknown: Shard ID');
@@ -204,6 +202,10 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		alive = Math.max(0, --alive);
 		await this.#storage.put<number>(key, alive);
 		console.log('[GATEWAY][counter]', { sid, alive });
+
+		if (req.headers.get(HEADERS.ISEMPTY) === '1') {
+			await this.#storage.delete(`rid:${rid}`);
+		}
 
 		// sort by availability
 		let bucket = await this.#sort();

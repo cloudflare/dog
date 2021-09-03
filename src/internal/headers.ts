@@ -12,3 +12,6 @@ export const NEIGHBORID = 'x-dog-neighbor-identifier';
 
 // The `Socket` identifier for a whisper's target
 export const TARGETID = 'x-dog-target-identifier';
+
+// The `Socket` identifier for a whisper's target
+export const ISEMPTY = 'x-dog-client-empty';

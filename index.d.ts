@@ -9,7 +9,7 @@ export type Message = JSON.Object | string;
 
 export interface State {
 	gateway: string;
-	socket: WebSocket;
+	socket: Set<WebSocket>;
 }
 
 export interface Socket {
