@@ -10,6 +10,7 @@ var input = $('input');
 // @ts-ignore
 var username = window.NAME;
 var ws = new WebSocket('ws://localhost:8787/ws');
+var users = [];
 
 ws.onopen = function (ev) {
 	input.focus(); // form input
@@ -31,8 +32,10 @@ ws.onmessage = function (ev) {
 			return toJSON('joined');
 		}
 		case 'users:list': {
-			console.log('[ws][users:list]', data);
-			data.list.forEach(obj => new_user(obj.uid, obj.name));
+			if (data.list) (users = data.list).forEach(obj => {
+				new_user(obj.uid, obj.name);
+			});
+			return console.log('[ws][users:list]', data);
 		}
 		case 'join': {
 			// via Room.onopen
@@ -61,12 +64,12 @@ ws.onmessage = function (ev) {
 	}
 }
 
-ws.onclose = function (ev) {
-	console.log('[ws][close]', ev);
-}
-
-ws.onerror = function (ev) {
-	console.log('[ws][error]', ev);
+ws.onclose = ws.onerror = function (ev) {
+	console.log('[ws][%s]', ev.type, ev);
+	users.forEach(obj => {
+		announce(obj.name, false);
+		toggle_user(obj.uid, false);
+	});
 }
 
 // Send a message
