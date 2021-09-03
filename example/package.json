@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "dev": "miniflare -o ROOM=Room -o LOBBY=Lobby --modules --watch",
-    "build": "cfw build worker --single",
+    "build": "cfw build worker --single --no-minify",
     "types": "tsc --noEmit"
   },
   "dependencies": {
