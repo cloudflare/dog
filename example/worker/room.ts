@@ -21,8 +21,12 @@ type Output = {
 export class Room extends Shard<Bindings> {
 	users = new Map<string, number>();
 
-	link(env: Bindings) { return env.LOBBY }
-	self(env: Bindings) { return env.ROOM }
+	link(env: Bindings) {
+		return {
+			parent: env.LOBBY,
+			self: env.ROOM,
+		};
+	}
 
 	async receive(req: Request) {
 		console.log('[ HELLO ][receive] req.url', req.url);

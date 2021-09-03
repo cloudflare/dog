@@ -24,28 +24,27 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 	readonly #pool: Pool;
 	readonly #neighbors: Set<ShardID>;
-	#target: DurableObjectNamespace;
-	#ns: DurableObjectNamespace;
+	readonly #parent: DurableObjectNamespace;
+	readonly #self: DurableObjectNamespace;
 
 	constructor(state: DurableObjectState, env: T) {
 		this.uid = state.id.toString();
-		this.#target = this.link(env);
-		this.#ns = this.self(env);
 		this.#neighbors = new Set;
 		this.#pool = new Map;
+
+		let refs = this.link(env);
+		this.#parent = refs.parent;
+		this.#self = refs.self;
 	}
 
 	/**
 	 * Specify which `Gateway` class is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract link(bindings: T): DurableObjectNamespace & DOG.Gateway<T>;
-
-	/**
-	 * Self-identify the current `Shard` class.
-	 * @NOTE User-supplied logic/function.
-	 */
-	abstract self(bindings: T): DurableObjectNamespace & Shard<T>;
+	abstract link(bindings: T): {
+		parent: DurableObjectNamespace & DOG.Gateway<T>;
+		self: DurableObjectNamespace & Shard<T>;
+	};
 
 	/**
 	 * Receive the HTTP request.
@@ -246,7 +245,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		await Promise.all(
 			list.map(sid => {
-				let stub = this.#ns.get(sid);
+				let stub = this.#self.get(sid);
 				let headers = new Headers(commons);
 				headers.set(HEADERS.SHARDID, sid);
 				return stub.fetch(params.route, {
@@ -293,7 +292,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		// Prepare internal request
 		// ~> notify Gateway of -1 count
-		let gateway = this.#target.get(gid);
+		let gateway = this.#parent.get(gid);
 		await gateway.fetch(ROUTES.CLOSE, { headers });
 	}
 }

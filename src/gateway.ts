@@ -16,26 +16,32 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	public abstract limit: number;
 
 	public readonly uid: string;
-	public readonly target: DurableObjectNamespace;
+
+	readonly #storage: DurableObjectStorage;
+	readonly #child: DurableObjectNamespace;
 
 	#current?: ShardID;
-	#storage: DurableObjectStorage;
-	#sorted: ShardID[];
 	#sids: Set<ShardID>;
+	#sorted: ShardID[];
 
 	constructor(state: DurableObjectState, env: T) {
 		this.#storage = state.storage;
 		this.uid = state.id.toString();
-		this.target = this.link(env);
 		this.#sids = new Set;
 		this.#sorted = [];
+
+		let refs = this.link(env);
+		this.#child = refs.child;
 	}
 
 	/**
 	 * Specify which `Shard` class extension is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract link(bindings: T): DurableObjectNamespace & DOG.Shard<T>;
+	abstract link(bindings: T): {
+		child: DurableObjectNamespace & DOG.Shard<T>;
+		self: DurableObjectNamespace & DOG.Gateway<T>;
+	};
 
 	/**
 	 * Generate a unique identifier for the request.
@@ -46,8 +52,8 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	/**
 	 * Generate a `DurableObjectId` for the shard cluster
 	 */
-	clusterize(req: Request): Promise<DurableObjectId> | DurableObjectId {
-		return this.target.newUniqueId();
+	clusterize(req: Request, target: DurableObjectNamespace): Promise<DurableObjectId> | DurableObjectId {
+		return target.newUniqueId();
 	}
 
 	/**
@@ -80,10 +86,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 
 		if (alive != null && this.limit >= ++alive) {
 			// use this shard if found & not over limit
-			console.log('IF-OK', { sid, limit: this.limit, alive });
 		} else {
-			console.log('ELSE', { sid, alive, limit: this.limit });
-
 			// if aware of existing shards, sort & get most free
 			// NOTE: `sync` only keeps buckets if `alive` <= limit
 			let pair = this.#sorted.length > 0 && await this.#sort();
@@ -92,8 +95,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 				sid = pair[0].substring(4);
 				alive = pair[1] + 1;
 			} else {
-				sid = await this.clusterize(request).toString();
-				console.log('~> ELSE NEW:', { sid });
+				sid = await this.clusterize(request, this.#child).toString();
 				this.#welcome(sid); // no await!
 				alive = 1;
 			}
@@ -101,7 +103,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 
 		this.#current = (alive < this.limit) ? sid : undefined;
 
-		shard = this.target.get(sid);
+		shard = this.#child.get(sid);
 		await this.#storage.put<string>(`rid:${rid}`, sid);
 		await this.#storage.put<number>(`sid:${sid}`, alive);
 		console.log('[GATEWAY] storage.put', { sid, alive });
@@ -143,7 +145,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		headers.set(HEADERS.NEIGHBORID, stranger);
 		headers.set(HEADERS.GATEWAYID, this.uid);
 
-		let stub = this.target.get(target);
+		let stub = this.#child.get(target);
 		return stub.fetch(ROUTES.NEIGHBOR, { headers });
 	}
 

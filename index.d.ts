@@ -24,19 +24,17 @@ export interface Socket {
 // TODO: ModuleWorker is inherited from source
 export abstract class Shard<T extends ModuleWorker.Bindings> {
 	readonly uid: string;
+
 	constructor(state: DurableObjectState, env: T);
 
 	/**
 	 * Specify which `Gateway` class is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract link(bindings: T): DurableObjectNamespace & Gateway<T>;
-
-	/**
-	 * Self-identify the current `Shard` class.
-	 * @NOTE User-supplied logic/function.
-	 */
-	abstract self(bindings: T): DurableObjectNamespace & Shard<T>;
+	abstract link(bindings: T): {
+		parent: DurableObjectNamespace & Gateway<T>;
+		self: DurableObjectNamespace & Shard<T>;
+	};
 
 	/**
 	 * Receive the HTTP request.
@@ -59,7 +57,6 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	abstract limit: number;
-	readonly target: DurableObjectNamespace;
 	readonly uid: string;
 
 	constructor(state: DurableObjectState, env: T);
@@ -68,7 +65,10 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	 * Specify which `Shard` class extension is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract link(bindings: T): any & Shard<T>;
+	abstract link(bindings: T): {
+		child: DurableObjectNamespace & Shard<T>;
+		self: DurableObjectNamespace & Gateway<T>;
+	};
 
 	/**
 	 * Generate a unique identifier for the request.
@@ -78,9 +78,9 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 
 	/**
 	 * Generate a `DurableObjectId` for the shard cluster.
-	 * @default this.target.newUniqueId()
+	 * @default target.newUniqueId()
 	 */
-	clusterize(req: Request): Promise<DurableObjectId> | DurableObjectId;
+	clusterize(req: Request, target: DurableObjectNamespace): Promise<DurableObjectId> | DurableObjectId;
 
 	/**
 	 * Receives the initial request & figures out where to send it.

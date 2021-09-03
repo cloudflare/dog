@@ -8,22 +8,25 @@ export class Lobby extends Gateway<Bindings> {
 	limit = 2;
 
 	link(env: Bindings) {
-		return env.ROOM;
+		return {
+			child: env.ROOM,
+			self: env.LOBBY,
+		};
 	}
 
 	// Generate client unique identifier
 	identify(req: Request): string {
 		let { searchParams } = new URL(req.url);
 		return searchParams.get('u') || 'anon';
-		// return SHA256(ident);
 	}
+
 	// identify(req: Request): string {
-	// 	// let ident = req.headers.get('cf-connecting-ip') || 'anon';
+	// 	return SHA256(req.headers.get('cf-connecting-ip') || 'anon');
 	// 	return req.headers.get('sec-websocket-key')!;
 	// }
 
 	// Group requests by colo
-	// clusterize(req: Request): DurableObjectId {
-	// 	return this.target.newUniqueId({ jurisdiction: 'eu' });
+	// clusterize(req: Request, target: DurableObjectNamespace): DurableObjectId {
+	// 	return target.newUniqueId({ jurisdiction: 'eu' });
 	// }
 }
