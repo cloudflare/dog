@@ -46,7 +46,7 @@ ws.onmessage = function (ev) {
 			return announce(data.from, 'left');
 		}
 		case 'user:msg': {
-			return message(data.from, data.text);
+			return message(data.from, data.text, data.meta, data.to);
 		}
 		default: {
 			console.log('DEFAULT', input);
@@ -127,13 +127,18 @@ function announce(name, action) {
 /**
  * @param {string} name
  * @param {string} text
+ * @param {string} [type]
+ * @param {string} [to]
  */
-function message(name, text) {
+function message(name, text, type, to) {
 	let div = document.createElement('div');
 	div.className = 'msg';
 
 	let from = document.createElement('strong');
 	from.innerText = name;
+
+	if (type) div.className += ' ' + type;
+	if (to) from.innerText += ' ↦ ' + to;
 
 	let msg = document.createElement('span');
 	msg.innerText = text;

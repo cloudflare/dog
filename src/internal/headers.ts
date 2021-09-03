@@ -9,3 +9,6 @@ export const SHARDID = 'x-dog-shard-identifier';
 
 // The `Shard` identifier that is broadcasting
 export const NEIGHBORID = 'x-dog-neighbor-identifier';
+
+// The `Socket` identifier for a whisper's target
+export const TARGETID = 'x-dog-target-identifier';

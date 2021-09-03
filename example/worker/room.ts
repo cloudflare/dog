@@ -62,7 +62,7 @@ export class Room extends Shard<Bindings> {
 		this.users.delete(socket.uid);
 	}
 
-	onmessage(socket: Socket, data: string) {
+	async onmessage(socket: Socket, data: string) {
 		// raw broadcast channel
 		let input = JSON.parse(data) as Message & MessageData;
 		console.log('[room] onmessage', input);
@@ -95,7 +95,7 @@ export class Room extends Shard<Bindings> {
 		if (input.type === 'msg') {
 			let text = input.text.trim();
 
-			let output: Output & { text: string } = {
+			let output: Output & { text: string, to?: string; meta?: string } = {
 				type: 'user:msg',
 				from: socket.uid,
 				text: text,
@@ -109,13 +109,27 @@ export class Room extends Shard<Bindings> {
 
 			// group chat: "/group <text>" || "/g <text>"
 			if (match = /^([/](?:g|group)\s+)/.exec(text)) {
-				output.text = text.substring(match[1].length);
+				output.meta = 'group'; // group only
+				output.text = text.substring(match[0].length);
 				return socket.emit(output, true);
+			}
+
+			// whisper: "/w <target> <text>" || "/msg <target> <text>"
+			if (match = /^([/](?:w|msg)\s+(?<target>[^\s]+))\s+/.exec(text)) {
+				let target = match.groups!.target;
+				output.text = text.substring(match[0].length);
+				output.meta = 'whisper';
+				output.to = target;
+
+				// ensure it's sent to target first
+				await socket.whisper(target, output);
+				// then confirm w/ sender by echoing msg
+				return socket.send(JSON.stringify(output));
 			}
 
 			// all chat (default): "/all <text>" || "/a <text>"
 			if (match = /^([/](?:a|all)\s+)/.exec(text)) {
-				output.text = text.substring(match[1].length);
+				output.text = text.substring(match[0].length);
 				return socket.broadcast(output, true);
 			}
 

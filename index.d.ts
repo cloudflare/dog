@@ -18,6 +18,7 @@ export interface Socket {
 	close: WebSocket['close'];
 	emit(msg: Message, self?: boolean): void;
 	broadcast(msg: Message, self?: boolean): Promise<void>;
+	whisper(target: string, msg: Message): Promise<void>;
 }
 
 // TODO: ModuleWorker is inherited from source

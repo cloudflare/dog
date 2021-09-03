@@ -97,6 +97,16 @@ input {
 	display: block;
 }
 
+.msg.group {
+	border-left: 2px solid green;
+	background-color: lightgreen;
+}
+
+.msg.whisper {
+	border-left: 2px solid purple;
+	background-color: lavender;
+}
+
 .announce + .msg,
 msg:first-of-type {
 	border-top-color: transparent;

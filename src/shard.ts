@@ -11,6 +11,14 @@ export type ShardID = string;
 
 type Pool = Map<ReqID, DOG.State>;
 
+interface Dispatch {
+	gateway: string;
+	sender: string;
+	target?: string;
+	route: string;
+	body: string;
+}
+
 export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shard<T> {
 	public readonly uid: string;
 
@@ -93,6 +101,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			send: server.send.bind(server),
 			close: server.close.bind(server),
 			broadcast: this.#broadcast.bind(this, gid, rid),
+			whisper: this.#whisper.bind(this, gid, rid),
 			emit: this.#emit.bind(this, rid),
 		};
 
@@ -142,7 +151,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		try {
 			var { pathname } = new URL(request.url, 'foo://');
-			var { rid, gid } = utils.validate(request, this.uid);
+			var { rid, gid, tid } = utils.validate(request, this.uid);
 		} catch (err) {
 			return utils.abort(400, (err as Error).message);
 		}
@@ -160,6 +169,20 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			} catch (err) {
 				let msg = (err as Error).stack;
 				return utils.abort(400, msg || 'Error parsing broadcast message');
+			}
+		}
+
+		if (pathname === ROUTES.WHISPER) {
+			try {
+				if (!tid) throw new Error('Missing: Target ID');
+
+				let state = this.#pool.get(tid);
+				if (state) state.socket.send(await request.text());
+
+				return new Response;
+			} catch (err) {
+				let msg = (err as Error).stack;
+				return utils.abort(400, msg || 'Error parsing whisper message');
 			}
 		}
 
@@ -198,27 +221,61 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		this.#emit(sender, body, self);
 
+		await this.#dispatch({
+			gateway, sender, body,
+			route: ROUTES.BROADCAST,
+		});
+	}
+
+	/**
+	 * Construct & send a message to SHARD neighbors.
+	 */
+	async #dispatch(params: Dispatch) {
 		let list = [...this.#neighbors];
 		if (list.length < 1) return;
 
-		let commons = {
-			[HEADERS.GATEWAYID]: gateway,
+		let commons: HeadersInit = {
 			[HEADERS.NEIGHBORID]: this.uid,
-			[HEADERS.CLIENTID]: sender,
+			[HEADERS.GATEWAYID]: params.gateway,
+			[HEADERS.CLIENTID]: params.sender,
 		};
+
+		if (params.target) {
+			commons[HEADERS.TARGETID] = params.target;
+		}
 
 		await Promise.all(
 			list.map(sid => {
 				let stub = this.#ns.get(sid);
 				let headers = new Headers(commons);
 				headers.set(HEADERS.SHARDID, sid);
-				return stub.fetch(ROUTES.BROADCAST, {
+				return stub.fetch(params.route, {
 					method: 'POST',
-					headers,
-					body,
+					headers: headers,
+					body: params.body,
 				});
 			})
 		);
+	}
+
+	/**
+	 * Send a Message to a specific Socket within a SHARD.
+	 */
+	async #whisper(gateway: string, sender: ReqID, target: ReqID, msg: DOG.Message): Promise<void> {
+		// TODO: ever allow this?
+		if (sender === target) return;
+
+		let body = typeof msg === 'object'
+			? JSON.stringify(msg)
+			: msg;
+
+		let state = this.#pool.get(target);
+		if (state) return state.socket.send(body);
+
+		await this.#dispatch({
+			gateway, sender, target, body,
+			route: ROUTES.WHISPER
+		});
 	}
 
 	/**

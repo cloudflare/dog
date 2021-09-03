@@ -6,3 +6,6 @@ export const NEIGHBOR = '/~$~/jello';
 
 // A message was broadcasted
 export const BROADCAST = '/~$~/message';
+
+// A whisper needs to be delivered
+export const WHISPER = '/~$~/whisper';

@@ -48,5 +48,7 @@ export function validate(req: Request, shardid?: string) {
 	let rid = req.headers.get(HEADERS.CLIENTID) || nid;
 	if (rid == null) throw new Error('Missing: Request ID');
 
-	return { gid, rid, sid };
+	let tid = req.headers.get(HEADERS.TARGETID);
+
+	return { gid, rid, sid, tid };
 }
