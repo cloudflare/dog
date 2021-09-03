@@ -12,16 +12,18 @@ export class Lobby extends Gateway<Bindings> {
 	}
 
 	// Generate client unique identifier
-	identify(req: Request): Promise<string> {
-		// let ident = req.headers.get('cf-connecting-ip') || 'anon';
-		let ident = req.headers.get('sec-websocket-key') || 'anon'; // remove
+	identify(req: Request): string {
 		let { searchParams } = new URL(req.url);
-		ident += searchParams.get('name') || '';
-		return SHA256(ident);
+		return searchParams.get('u') || 'anon';
+		// return SHA256(ident);
 	}
+	// identify(req: Request): string {
+	// 	// let ident = req.headers.get('cf-connecting-ip') || 'anon';
+	// 	return req.headers.get('sec-websocket-key')!;
+	// }
 
 	// Group requests by colo
 	// clusterize(req: Request): DurableObjectId {
-	// 	return this.target.newUniqueId({ jurisdiction: req.cf.country });
+	// 	return this.target.newUniqueId({ jurisdiction: 'eu' });
 	// }
 }

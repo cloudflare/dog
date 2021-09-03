@@ -9,7 +9,7 @@ var input = $('input');
 
 // @ts-ignore
 var username = window.NAME;
-var ws = new WebSocket('ws://localhost:8787/ws');
+var ws = new WebSocket(`ws://localhost:8787/ws?u=${username}`);
 var users = [];
 
 ws.onopen = function (ev) {
