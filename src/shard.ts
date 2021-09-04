@@ -43,12 +43,12 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	}
 
 	/**
-	 * Specify which `Gateway` class is the target.
+	 * Specify Durable Object relationships.
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract link(bindings: T): {
 		parent: DurableObjectNamespace & DOG.Gateway<T>;
-		self: DurableObjectNamespace & Shard<T>;
+		self: DurableObjectNamespace & DOG.Shard<T>;
 	};
 
 	/**
@@ -159,6 +159,28 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 		});
 	}
 
+	// Gossip handler; respond to Gossip from another SHARD instance.
+	ongossip?(msg: DOG.Gossip.Message): Promise<DOG.Gossip.Payload> | DOG.Gossip.Payload
+
+	/**
+	 * Share some Gossip to SHARD's neighbors.
+	 * Neighboring SHARDs respond to gossip directly; via `ongossip`.
+	 * AKA, SHARD to SHARD communication.
+	 */
+	async gossip(msg: DOG.Gossip.Message): Promise<DOG.Gossip.Payload[]> {
+		if (this.#neighbors.size < 1) return [];
+
+		let list = await this.#dispatch({
+			gateway: 'Q', // ignored
+			sender: this.uid, // this shard
+			route: ROUTES.GOSSIP,
+			body: msg == null ? msg : JSON.stringify(msg)
+		});
+
+		// TS enforce `JSON` payloads
+		return Promise.all(list!.map(r => r.json()));
+	}
+
 	/**
 	 * Receive a request from Gateway node
 	 */
@@ -200,6 +222,19 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			} catch (err) {
 				let msg = (err as Error).stack;
 				return utils.abort(400, msg || 'Error parsing whisper message');
+			}
+		}
+
+		if (pathname === ROUTES.GOSSIP) {
+			try {
+				if (!this.ongossip) throw new Error('Missing: `ongossip` handler');
+				let payload = await this.ongossip(await request.json());
+				let body = payload == null ? null : JSON.stringify(payload);
+				let headers = { 'Content-Type': 'application/json' };
+				return new Response(body, { headers });
+			} catch (err) {
+				let msg = (err as Error).stack;
+				return utils.abort(400, msg || 'Error while gossiping');
 			}
 		}
 
@@ -249,7 +284,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	/**
 	 * Construct & send a message to SHARD neighbors.
 	 */
-	async #dispatch(params: Dispatch) {
+	async #dispatch(params: Dispatch): Promise<Response[] | void> {
 		let list = [...this.#neighbors];
 		if (list.length < 1) return;
 
@@ -263,7 +298,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			commons[HEADERS.TARGETID] = params.target;
 		}
 
-		await Promise.all(
+		return Promise.all(
 			list.map(sid => {
 				let stub = this.#self.get(sid);
 				let headers = new Headers(commons);

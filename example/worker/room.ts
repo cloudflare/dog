@@ -1,6 +1,6 @@
 import { Shard } from 'dog';
 import type { Bindings } from './types';
-import type { Socket } from 'dog';
+import type { Socket, Gossip } from 'dog';
 
 type Message = {
 	uid: string;
@@ -16,6 +16,10 @@ type Output = {
 	type: string;
 	from?: string;
 	time: number;
+}
+
+type Note = Gossip.Message & {
+	type: 'intra:user:list';
 }
 
 export class Room extends Shard<Bindings> {
@@ -66,6 +70,14 @@ export class Room extends Shard<Bindings> {
 		this.users.delete(socket.uid);
 	}
 
+	async ongossip(msg: Note): Promise<Gossip.Payload> {
+		if (msg.type === 'intra:user:list') {
+			return [ ...this.users.keys() ];
+		}
+
+		throw new Error(`Missing: "${msg.type}" ongossip`);
+	}
+
 	async onmessage(socket: Socket, data: string) {
 		// raw broadcast channel
 		let input = JSON.parse(data) as Message & MessageData;
@@ -85,9 +97,16 @@ export class Room extends Shard<Bindings> {
 
 		// send down a list of all connected users
 		if (input.type === 'req:user:list') {
+			let results = await this.gossip<Note>({
+				type: 'intra:user:list'
+			}) as string[][];
+
+			let list = new Set<string>(results.flat());
+			for (let [user] of this.users) list.add(user);
+
 			let output: Output & { list: string[] } = {
 				type: 'user:list',
-				list: [...this.users.keys()],
+				list: [...list],
 				time: Date.now(),
 			};
 

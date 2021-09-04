@@ -4,8 +4,16 @@ declare namespace JSON {
 	type Object = JSON.Value[] | { [key: string]: JSON.Value };
 }
 
-// TODO: support arraybuffer types
+// Socket Messages
+// @todo support arraybuffer types
 export type Message = JSON.Object | string;
+
+export namespace Gossip {
+	type Message = {
+		[key: string]: JSON.Value;
+	};
+	type Payload = JSON.Object | JSON.Value;
+}
 
 export interface State {
 	gateway: string;
@@ -50,6 +58,9 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 
 	/** Handle the WS connection upgrade. */
 	connect(req: Request): Promise<Response>;
+
+	ongossip?(msg: Gossip.Message): Promise<Gossip.Payload> | Gossip.Payload;
+	gossip<M extends Gossip.Message>(msg: M): Promise<Gossip.Payload[]>;
 
 	/** Receive a request from a Gateway object. */
 	fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;

@@ -9,3 +9,6 @@ export const BROADCAST = '/~$~/message';
 
 // A whisper needs to be delivered
 export const WHISPER = '/~$~/whisper';
+
+// Sending gossip between SHARDs
+export const GOSSIP = '/~$~/gossip';
