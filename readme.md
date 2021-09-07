@@ -98,3 +98,8 @@ export default {
 ### `Shard`
 
 > **Note:** Refer to the [TypeScript definitions](/index.d.ts#33) for more information.
+
+
+## License
+
+MIT © Cloudflare
