@@ -6,8 +6,7 @@
     "types": "tsc --noEmit"
   },
   "dependencies": {
-    "dog": "workspace:*",
-    "worktop": "0.7.1"
+    "dog": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "2.2.2",

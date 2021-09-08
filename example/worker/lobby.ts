@@ -1,11 +1,9 @@
 import { Gateway } from 'dog';
-import { SHA256 } from 'worktop/crypto';
 
 import type { Bindings } from './types';
 
 export class Lobby extends Gateway<Bindings> {
-	// limit = 50;
-	limit = 2;
+	limit = 2; // max conns per SHARD stub
 
 	link(env: Bindings) {
 		return {
@@ -20,12 +18,7 @@ export class Lobby extends Gateway<Bindings> {
 		return searchParams.get('u') || 'anon';
 	}
 
-	// identify(req: Request): string {
-	// 	return SHA256(req.headers.get('cf-connecting-ip') || 'anon');
-	// 	return req.headers.get('sec-websocket-key')!;
-	// }
-
-	// Group requests by colo
+	// Optional: Only create SHARDs in the "eu" jurisdiction
 	// clusterize(req: Request, target: DurableObjectNamespace): DurableObjectId {
 	// 	return target.newUniqueId({ jurisdiction: 'eu' });
 	// }
