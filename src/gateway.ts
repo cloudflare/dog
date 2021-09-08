@@ -62,7 +62,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	async fetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
 		let request = new Request(input, init);
 		let { pathname } = new URL(request.url, 'foo://');
-		console.log('[GATEWAY][fetch] pathname', pathname);
 
 		// ~> internal SHARD request
 		if (pathname === ROUTES.CLOSE) {
@@ -73,16 +72,11 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 			}
 		}
 
-		// console.log('[GATEWAY][fetch] request', [...request.headers]);
-
 		let rid = await this.identify(request);
-		console.log('[GATEWAY][fetch] rid', rid);
 
 		let shard: DurableObjectStub | void, alive: number | void;
 		let sid = await this.#storage.get<string|void>(`rid:${rid}`) || this.#current || this.#sorted[0];
 		if (sid != null) alive = await this.#storage.get<number|void>(`sid:${sid}`);
-
-		console.log('[GATEWAY][fetch] storage.exists', { sid, alive });
 
 		if (alive != null && this.limit >= ++alive) {
 			// use this shard if found & not over limit
@@ -106,7 +100,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		shard = this.#child.get(sid);
 		await this.#storage.put<string>(`rid:${rid}`, sid);
 		await this.#storage.put<number>(`sid:${sid}`, alive);
-		console.log('[GATEWAY] storage.put', { sid, alive });
 
 		// Attach indentifiers / hash keys
 		request.headers.set(HEADERS.GATEWAYID, this.uid);
@@ -155,8 +148,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	 * Return the most-available entry.
 	 */
 	async #sort(): Promise<BucketTuple | void> {
-		console.log('[GATEWAY] SORTING');
-
 		let sids = new Set<string>();
 		let tuples: BucketTuple[] = [];
 
@@ -185,9 +176,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		this.#sids = sids;
 		this.#sorted = list;
 
-		console.log('[GATEWAY] SORTING ~> DONE:', { list });
-		// console.log('[GATEWAY] SORTING ~> DONE:', { buckets, list });
-
 		return bucket;
 	}
 
@@ -201,7 +189,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 
 		alive = Math.max(0, --alive);
 		await this.#storage.put<number>(key, alive);
-		console.log('[GATEWAY][counter]', { sid, alive });
 
 		if (req.headers.get(HEADERS.ISEMPTY) === '1') {
 			await this.#storage.delete(`rid:${rid}`);

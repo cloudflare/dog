@@ -135,7 +135,6 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		if (this.onmessage) {
 			server.addEventListener('message', evt => {
-				// console.log('[  RAW  ][message]', rid, evt);
 				this.onmessage!(socket, evt.data);
 			});
 		}
@@ -186,7 +185,6 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	 */
 	async fetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
 		let request = new Request(input, init);
-		// console.log('[ SHARD ][fetch] url', request.url);
 
 		try {
 			var { pathname } = new URL(request.url, 'foo://');
@@ -336,8 +334,6 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	 * Tell relevant Gateway object to -1 its count
 	 */
 	async #close(rid: ReqID, gid: string, isEmpty: boolean) {
-		console.log('[ SHARD ][#close]', { gid, rid });
-
 		let headers = new Headers;
 		headers.set(HEADERS.GATEWAYID, gid);
 		headers.set(HEADERS.SHARDID, this.uid);
