@@ -21,16 +21,39 @@ export interface State {
 }
 
 export interface Socket {
+	/**
+	 * The request identifier.
+	 * @see {Gateway.identify}
+	 */
 	uid: string;
+	/**
+	 * Send the WebSocket client a string-serializable message.
+	 */
 	send: WebSocket['send'];
+	/**
+	 * Close the WebSocket connection.
+	 */
 	close: WebSocket['close'];
+	/**
+	 * Send a message to other WebSockets owned by the SHARD.
+	 * @param {boolean} [self] Send the message to the sender?
+	 */
 	emit(msg: Message, self?: boolean): void;
+	/**
+	 * Send a message to ALL WebSockets within the CLUSTER.
+	 * @param {boolean} [self] Send the message to the sender?
+	 */
 	broadcast(msg: Message, self?: boolean): Promise<void>;
+	/**
+	 * Send a message to a specific WebSocket target.
+	 */
 	whisper(target: string, msg: Message): Promise<void>;
 }
 
-// TODO: ModuleWorker is inherited from source
-export abstract class Shard<T extends ModuleWorker.Bindings> {
+// @see https://github.com/cloudflare/workers-types/pull/102
+export type Bindings = Record<string, KVNamespace | DurableObjectNamespace | CryptoKey | string>;
+
+export abstract class Shard<T extends Bindings> {
 	readonly uid: string;
 
 	constructor(state: DurableObjectState, env: T);
@@ -51,18 +74,38 @@ export abstract class Shard<T extends ModuleWorker.Bindings> {
 	 */
 	abstract receive(req: Request): Promise<Response> | Response;
 
+	/** The WebSocket client connection was established. */
 	onopen?(socket: Socket): Promise<void> | void;
+	/** The WebSocket client was closed. */
 	onclose?(socket: Socket): Promise<void> | void;
+	/** The WebSocket client was closed due to an error. */
 	onerror?(socket: Socket): Promise<void> | void;
+	/** The WebSocket client sent the SHARD a message. */
 	onmessage?(socket: Socket, data: string): Promise<void> | void;
 
-	/** Handle the WS connection upgrade. */
+	/**
+	 * Handle the WS connection upgrade.
+	 */
 	connect(req: Request): Promise<Response>;
 
+	/**
+	 * Respond to another SHARD's gossip.
+	 * @NOTE Must return a JSON-serializable value.
+	 */
 	ongossip?(msg: Gossip.Message): Promise<Gossip.Payload> | Gossip.Payload;
+
+	/**
+	 * Send a message directly to other SHARDs.
+	 * A `Gossip.Message` must be a JSON object.
+	 * Returns a list of `Gossip.Payload`s, one from each SHARD sibling.
+	 * @NOTE Peer-to-peer communication; does not involve client connections.
+	 */
 	gossip<M extends Gossip.Message>(msg: M): Promise<Gossip.Payload[]>;
 
-	/** Receive a request from a Gateway object. */
+	/**
+	 * Receives a request from a Gateway object.
+	 * @IMPORTANT Do NOT define your own `fetch` method!
+	 */
 	fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
 }
 

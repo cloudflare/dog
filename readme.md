@@ -103,7 +103,7 @@ export default {
 
 ### `Gateway`
 
-> **Note:** Refer to the [TypeScript definitions](/index.d.ts#L69) for more information.
+> **Note:** Refer to the [TypeScript definitions](/index.d.ts#L112) for more information.
 
 ***Required:***
 
@@ -124,7 +124,7 @@ You may attach any additional state and/or methods to your `Gateway` class exten
 
 ### `Shard`
 
-> **Note:** Refer to the [TypeScript definitions](/index.d.ts#33) for more information.
+> **Note:** Refer to the [TypeScript definitions](/index.d.ts#56) for more information.
 
 ***Required:***
 
