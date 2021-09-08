@@ -11,9 +11,9 @@ Modify the `package.json` file so that its `"dog"` dependency is non-local:
 ```diff
 {
   "dependencies": {
---    "dog": "workspace:*"
-++    "dog": "next"
-  },
+--  "dog": "workspace:*"
+++  "dog": "next"
+  }
 }
 ```
 
@@ -51,11 +51,11 @@ Currently, when a user visits `localhost:5000`, they enter an arbitrary username
 
 The `Lobby` identifies each request by its `?u` query parameter. Of course, in a real application this would be an entity identifier, accessed by an `Authorization` header or a parsed cookie.
 
-The underlying `Shard` allows and accepts multiple connections sharing the same username. For a chatroom, this can surface as `lukeed` connecting through a desktop _and_ a mobile client. The `lukeed` user will/should expect to see any messages meant for them on all connected devices, including shard-only (`/group`) and whispered (`/w`) messages.
+The underlying `Shard` allows and accepts multiple connections sharing the same username. For a chatroom, this can surface as `lukeed` connecting through a desktop _and_ a mobile client. The `lukeed` user will/should expect to see any messages meant for them on all connected devices, including shard-only (`/group`) and whispered (`/w`) messages. However, this behavior might not be welcome in other applications – this is why `Gateway.identify` is user-specified, deferring full uniqueness control (and full responsibility) to the developer.
 
-When a connection is established, the client sends a `"req:user:list"` query to its `Room` server, who then _gossips_ with the other `Room` instances to compile a list of connected users. The `Room` then sends this list _only_ to the new connection (via `socket.send`).
+In this example, when a connection is established, the client sends a `"req:user:list"` query. The `Room` server owning the connection sees this query and then _gossips_ with the other `Room` instances to compile a list of connected users. The `Room` then sends this list _only_ to the new connection (via `socket.send`).
 
-Without gossiping, the `Room` would have only been able to send down a list of the users that **it** was currently hosting. Given that each `Room` is limited to `2` active connections, this would have meant that new users would only see themselves and one other user online, _despite the fact_ that the new user would be able to send and receive messages from everyone in the chatroom.
+Without gossiping, the `Room` would have only been able to send down a list of the users that **it** was currently hosting. Given that each `Room` is configured with a limit of `2` active connections, this would have meant that new users would only see themselves and one other user online, _despite the fact_ that the new user would be able to send and receive messages from everyone in the chatroom.
 
 
 ## Slash Commands
