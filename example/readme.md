@@ -22,9 +22,6 @@ Then, from this `/example` directory, run the following commands:
 ```sh
 $ npm install
 $ npm run dev
-
-# run file server for "public" directory
-$ php -S localhost:5000 -t public
 ```
 
 ### Using a local Build
@@ -38,16 +35,9 @@ $ pnpm install && pnpm run build
 $ cd example && pnpm run dev
 ```
 
-Then in another terminal, start any fileserver for the `/public` directory:
-
-```sh
-# built-in php server
-$ php -S localhost:5000 -t public
-```
-
 ## Overview
 
-Currently, when a user visits `localhost:5000`, they enter an arbitrary username, which sends a `/ws?u=<username>` request to the Worker, who then forwards the request to the `Lobby` class. As of now, a hardcoded `"lobby-id"` is used to identify the chatroom, but in a real-world setting, this would generally be tied to some URL/model identifier.
+Currently, when a user visits `localhost:8787`, they enter an arbitrary username, which sends a `/ws?u=<username>` request to the Worker, who then forwards the request to the `Lobby` class. As of now, a hardcoded `"lobby-id"` is used to identify the chatroom, but in a real-world setting, this would generally be tied to some URL/model identifier.
 
 The `Lobby` identifies each request by its `?u` query parameter. Of course, in a real application this would be an entity identifier, accessed by an `Authorization` header or a parsed cookie.
 

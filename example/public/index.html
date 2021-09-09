@@ -1,13 +1,110 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8"/>
-		<title>dog | demo</title>
-		<link rel="stylesheet" href="/index.css">
-		<script defer src="/index.js"></script>
+		<title>dog | chat demo</title>
+
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+			}
+			*, *:before, *:after {
+				box-sizing: border-box;
+			}
+			html {
+				font-size: 16px;
+			}
+			body {
+				color: #333;
+				display: grid;
+				line-height: 1.4;
+				text-rendering: optimizeLegibility;
+				font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+				grid-template-columns: minmax(180px, 30vw) 1fr;
+			}
+			aside {
+				display: grid;
+				padding: 0.25rem;
+				background: #f5f4f3;
+				grid-template-rows: repeat(auto-fit, clamp(44px, 4vh, 80px));
+				grid-row-gap: 0.25rem;
+				height: 100vh;
+			}
+			aside figure {
+				padding: 0.25rem;
+				padding-left: 1rem;
+				border: 1px solid #888;
+				border-radius: 0 0.5rem 0.5rem 0;
+				height: clamp(44px, 4vh, 80px);
+				border-left: 8px solid gray;
+				align-items: center;
+				display: flex;
+			}
+			figure.online {
+				border-left-color: #66bb6a;
+			}
+			main {
+				display: grid;
+				padding: 0.5rem;
+				grid-template-rows: auto 48px;
+				height: 100vh;
+			}
+			footer {
+				height: 100%;
+				padding: 0.25rem 0;
+			}
+			footer form {
+				height: 100%;
+				display: grid;
+				grid-template-columns: 1fr 80px;
+				grid-column-gap: 0.25rem;
+				column-gap: 0.25rem;
+			}
+			input {
+				border: none;
+				background: #ebedef;
+				padding: 0.5rem;
+			}
+			.chat {
+				display: flex;
+				flex-direction: column;
+				/* justify-content: flex-end; */
+				align-self: flex-end;
+				overflow-y: scroll;
+				max-height: 100%;
+				flex: 1;
+			}
+			.announce {
+				font-size: 85%;
+				padding: 0.25rem;
+				font-style: italic;
+				text-align: center;
+				color: #90a4ae;
+			}
+			.msg {
+				padding: 0.25rem 0.5rem;
+				border-top: 1px dashed #eee;
+			}
+			.msg strong {
+				display: block;
+			}
+			.msg.group {
+				border-left: 2px solid green;
+				background-color: lightgreen;
+			}
+			.msg.whisper {
+				border-left: 2px solid purple;
+				background-color: lavender;
+			}
+			.announce + .msg,
+			msg:first-of-type {
+				border-top-color: transparent;
+			}
+		</style>
 
 		<script>
 			var NAME = window.prompt("What's your name?");
-			console.log({ NAME });
+			console.log('Connected as', NAME);
 		</script>
 	</head>
 	<body>
@@ -25,5 +122,158 @@
 				</form>
 			</footer>
 		</main>
+
+		<script defer>
+			var $ = document.querySelector.bind(document);
+
+			var form = $('form');
+			var chat = $('.chat');
+			var aside = $('aside');
+			var input = $('input');
+
+			var uid = window.NAME;
+			var ws = new WebSocket(`ws://localhost:8787/ws?u=${uid}`);
+			var users = [];
+
+			ws.onopen = function (ev) {
+				input.focus(); // form input
+				console.log('[ws][open]', ev);
+				toJSON('req:user:list');
+				toJSON('req:connected');
+			}
+
+			ws.onmessage = function (ev) {
+				let input = JSON.parse(ev.data);
+				let { type, ...data } = input;
+
+				console.log('[MESSAGE]', input);
+
+				switch (type) {
+					case 'user:list': {
+						users = data.list;
+						// TODO: ^merge/gossip
+						return users.forEach(new_user);
+					}
+					case 'user:join': {
+						new_user(data.from);
+						users.push(data.from);
+						return announce(data.from, 'joined');
+					}
+					case 'user:connected': {
+						toggle_user(data.from, true);
+						return announce(data.from, 'connected');
+					}
+					case 'user:exit': {
+						// via Room.onclose
+						toggle_user(data.from, false);
+						return announce(data.from, 'left');
+					}
+					case 'user:msg': {
+						return message(data.from, data.text, data.meta, data.to);
+					}
+					default: {
+						console.log('DEFAULT', input);
+						break;
+					}
+				}
+			}
+
+			ws.onclose = ws.onerror = function (ev) {
+				console.log('[ws][%s]', ev.type, ev);
+				users.forEach(str => {
+					announce(str, 'left');
+					toggle_user(str, false);
+				});
+			}
+
+			// Send a message
+			form.onsubmit = function (ev) {
+				ev.preventDefault();
+				let text = (input.value || '').trim();
+				if (!text.length) return;
+
+				toJSON('msg', { text });
+				input.value = '';
+
+				// draw own message
+				// message(uid, text);
+			}
+
+			/**
+			 * @param {string} type
+			 * @param {object} [data]
+			 */
+			function toJSON(type, data={}) {
+				data.user = uid;
+				data.type = type;
+				ws.send(JSON.stringify(data));
+			}
+
+			/**
+			 * @param {string} user
+			 * @param {boolean} online
+			 */
+			function toggle_user(user, online) {
+				let fig = aside.querySelector(`figure[data-user="${user}"]`);
+				if (fig) fig.classList.toggle('online', online);
+			}
+
+			/**
+			 * @param {string} username
+			 */
+			function new_user(username) {
+				let fig = aside.querySelector(`figure[data-user="${username}"]`);
+				if (fig) return;
+
+				fig = document.createElement('figure');
+				let caption = document.createElement('figcaption');
+
+				fig.setAttribute('data-user', username);
+				caption.innerText = username;
+
+				fig.classList.add('online');
+				fig.appendChild(caption);
+				aside.appendChild(fig);
+			}
+
+			/**
+			 * @param {string} name
+			 * @param {string} action
+			 */
+			function announce(name, action) {
+				let div = document.createElement('div');
+				div.innerText = `${name} has ${action}`;
+				div.className = 'announce';
+				chat.appendChild(div);
+			}
+
+			/**
+			 * @param {string} name
+			 * @param {string} text
+			 * @param {string} [type]
+			 * @param {string} [to]
+			 */
+			function message(name, text, type, to) {
+				let div = document.createElement('div');
+				div.className = 'msg';
+
+				let from = document.createElement('strong');
+				from.innerText = name;
+
+				if (type) div.className += ' ' + type;
+				if (to) from.innerText += ' ↦ ' + to;
+
+				let msg = document.createElement('span');
+				msg.innerText = text;
+
+				div.appendChild(from);
+				div.appendChild(msg);
+
+				chat.appendChild(div);
+
+				// scroll to bottom
+				chat.scrollTop = chat.scrollHeight
+			}
+		</script>
 	</body>
 </html>

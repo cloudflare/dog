@@ -41,6 +41,7 @@ export class Room extends Shard<Bindings> {
 			return this.connect(req);
 		}
 
+		// NOTE: can employ whatever routing logic
 		return new Response(`PATH: "${pathname}"`);
 	}
 

@@ -1,3 +1,6 @@
+// @ts-ignore - inline the HTML, via build
+import HTML from '../public/index.html';
+
 import type { Bindings } from './types';
 
 // export the custom DO classes
@@ -6,9 +9,18 @@ export { Room } from './room';
 
 const worker: ModuleWorker<Bindings> = {
 	fetch(req, env, ctx) {
-		// DEMO: can implement front-facing routing
-		// let { pathname } = new URL(req.url);
-		// if (pathname !== '/') return new Response('Not Found', { status: 404 });
+		let { pathname } = new URL(req.url);
+		if (!/^(HEAD|GET)$/.test(req.method)) {
+			return new Response('Method not allowed', { status: 405 });
+		}
+
+		if (pathname === '/') {
+			return new Response(HTML, {
+				headers: {
+					'Content-Type': 'text/html;charset=utf-8'
+				}
+			});
+		}
 
 		// ~> can have multiple gateway'd shards
 		let id = env.LOBBY.idFromName('lobby-id');
