@@ -132,7 +132,8 @@
 			var input = $('input');
 
 			var uid = window.NAME;
-			var ws = new WebSocket(`ws://localhost:8787/ws?u=${uid}`);
+			var origin = location.origin.replace(/^http/, 'ws');
+			var ws = new WebSocket(`${origin}/ws?u=${uid}`);
 			var users = [];
 
 			ws.onopen = function (ev) {
