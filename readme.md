@@ -5,7 +5,7 @@
 ## Features
 
 * Supports `Shard` workloads using the HTTP and/or WS protocols
-* Auto-scale Durable Object clusters based on connection count
+* Creates or reuses a `Shard` based on configured connection limit
 * Includes `Shard`-to-`Shard` (peer-to-peer) communication
 * Ready for strongly-typed, strict TypeScript usage
 * Allows an active connection to:
