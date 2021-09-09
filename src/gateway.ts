@@ -6,28 +6,24 @@ import type { ReqID, ShardID } from './shard';
 import type * as DOG from 'dog';
 
 // NOTE: Private
-type BucketKey = `sid:${ShardID}`;
-type BucketTuple = [BucketKey, number];
-
-// STORAGE: `rid:${rid}` => (string) sid
-// STORAGE: `sid:${sid}` => (number) "live"
+type LiveCount = number;
+type BucketTuple = [ShardID, LiveCount];
 
 export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Gateway<T> {
 	public abstract limit: number;
-
 	public readonly uid: string;
 
-	readonly #storage: DurableObjectStorage;
+	readonly #mapping: Map<ReqID, ShardID>;
 	readonly #child: DurableObjectNamespace;
+	readonly #kids: Map<ShardID, LiveCount>;
 
-	#current?: ShardID;
-	#sids: Set<ShardID>;
 	#sorted: ShardID[];
+	#current?: ShardID;
 
 	constructor(state: DurableObjectState, env: T) {
-		this.#storage = state.storage;
 		this.uid = state.id.toString();
-		this.#sids = new Set;
+		this.#mapping = new Map;
+		this.#kids = new Map;
 		this.#sorted = [];
 
 		let refs = this.link(env);
@@ -75,8 +71,8 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		let rid = await this.identify(request);
 
 		let shard: DurableObjectStub | void, alive: number | void;
-		let sid = await this.#storage.get<string|void>(`rid:${rid}`) || this.#current || this.#sorted[0];
-		if (sid != null) alive = await this.#storage.get<number|void>(`sid:${sid}`);
+		let sid = this.#mapping.get(rid) || this.#current || this.#sorted[0];
+		if (sid != null) alive = this.#kids.get(sid);
 
 		if (alive != null && this.limit >= ++alive) {
 			// use this shard if found & not over limit
@@ -86,7 +82,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 			let pair = this.#sorted.length > 0 && await this.#sort();
 
 			if (pair) {
-				sid = pair[0].substring(4);
+				sid = pair[0];
 				alive = pair[1] + 1;
 			} else {
 				sid = await this.clusterize(request, this.#child).toString();
@@ -98,8 +94,8 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		this.#current = (alive < this.limit) ? sid : undefined;
 
 		shard = this.#child.get(sid);
-		await this.#storage.put<string>(`rid:${rid}`, sid);
-		await this.#storage.put<number>(`sid:${sid}`, alive);
+		this.#mapping.set(rid, sid);
+		this.#kids.set(sid, alive);
 
 		// Attach indentifiers / hash keys
 		request.headers.set(HEADERS.GATEWAYID, this.uid);
@@ -115,9 +111,9 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	 */
 	async #welcome(nid: ShardID): Promise<void> {
 		// get read-only copy
-		let items = [...this.#sids];
+		let items = [...this.#kids.keys()];
 		this.#sorted.unshift(nid);
-		this.#sids.add(nid);
+		this.#kids.set(nid, 1);
 
 		if (items.length > 0) {
 			await Promise.all(
@@ -148,32 +144,22 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	 * Return the most-available entry.
 	 */
 	async #sort(): Promise<BucketTuple | void> {
-		let sids = new Set<string>();
-		let tuples: BucketTuple[] = [];
-
-		let smap = await this.#storage.list<number>({ prefix: 'sid:' }) as Map<BucketKey, number>;
-
-		for (let pair of smap) {
-			tuples.push(pair as BucketTuple);
-			sids.add(pair[0].substring(4));
-		}
+		let tuples: BucketTuple[] = [ ...this.#kids ];
 
 		if (tuples.length > 1) {
 			tuples.sort((a, b) => a[1] - b[1]);
 		}
 
-		// ignore buckets w/ active >= limit
-		//   and only keep the bucket IDs
-		let i=0, list: BucketKey[] = [];
+		let i=0, list: ShardID[] = [];
 		let bucket: BucketTuple | void;
 		for (; i < tuples.length; i++) {
+			// ignore buckets w/ active >= limit
 			if (tuples[i][1] < this.limit) {
 				if (!bucket) bucket = tuples[i];
-				list.push(tuples[i][0]);
+				list.push(tuples[i][0]); // keep shard id
 			}
 		}
 
-		this.#sids = sids;
 		this.#sorted = list;
 
 		return bucket;
@@ -183,20 +169,19 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		var { rid, sid, gid } = utils.validate(req);
 		if (gid !== this.uid) throw new Error('Mismatch: Gateway ID');
 
-		let key = `sid:${sid}`;
-		let alive = await this.#storage.get<number>(key);
+		let alive = this.#kids.get(sid);
 		if (alive == null) throw new Error('Unknown: Shard ID');
 
 		alive = Math.max(0, --alive);
-		await this.#storage.put<number>(key, alive);
+		this.#kids.set(sid, alive);
 
 		if (req.headers.get(HEADERS.ISEMPTY) === '1') {
-			await this.#storage.delete(`rid:${rid}`);
+			this.#mapping.delete(rid);
 		}
 
 		// sort by availability
 		let bucket = await this.#sort();
-		this.#current = bucket ? bucket[0].substring(4) : undefined;
+		this.#current = bucket ? bucket[0] : undefined;
 
 		return new Response('OK');
 	}
