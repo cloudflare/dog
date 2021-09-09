@@ -298,7 +298,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		return Promise.all(
 			list.map(sid => {
-				let stub = this.#self.get(sid);
+				let stub = utils.load(this.#self, sid);
 				let headers = new Headers(commons);
 				headers.set(HEADERS.SHARDID, sid);
 				return stub.fetch(params.route, {
@@ -342,7 +342,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		// Prepare internal request
 		// ~> notify Gateway of -1 count
-		let gateway = this.#parent.get(gid);
+		let gateway = utils.load(this.#parent, gid);
 		await gateway.fetch(ROUTES.CLOSE, { headers });
 	}
 }

@@ -70,7 +70,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 
 		let rid = await this.identify(request);
 
-		let shard: DurableObjectStub | void, alive: number | void;
+		let alive: number | void;
 		let sid = this.#mapping.get(rid) || this.#current || this.#sorted[0];
 		if (sid != null) alive = this.#kids.get(sid);
 
@@ -93,7 +93,6 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 
 		this.#current = (alive < this.limit) ? sid : undefined;
 
-		shard = this.#child.get(sid);
 		this.#mapping.set(rid, sid);
 		this.#kids.set(sid, alive);
 
@@ -102,7 +101,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		request.headers.set(HEADERS.CLIENTID, rid);
 		request.headers.set(HEADERS.SHARDID, sid);
 
-		return shard.fetch(request);
+		return utils.load(this.#child, sid).fetch(request);
 	}
 
 	/**
@@ -134,7 +133,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		headers.set(HEADERS.NEIGHBORID, stranger);
 		headers.set(HEADERS.GATEWAYID, this.uid);
 
-		let stub = this.#child.get(target);
+		let stub = utils.load(this.#child, target);
 		return stub.fetch(ROUTES.NEIGHBOR, { headers });
 	}
 

@@ -52,3 +52,11 @@ export function validate(req: Request, shardid?: string) {
 
 	return { gid, rid, sid, tid };
 }
+
+/**
+ * Helper to load a `DurableObjectId` & then get the Stub
+ */
+export function load(ns: DurableObjectNamespace, uid: string): DurableObjectStub {
+	let doid = ns.idFromString(uid);
+	return ns.get(doid);
+}
