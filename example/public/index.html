@@ -113,7 +113,7 @@
 
 		<script>
 			var NAME = window.prompt("What's your name?");
-			console.log('Connected as', NAME);
+			console.log('Connected as', NAME = NAME.replace(/\s+/g, '-'));
 		</script>
 	</head>
 	<body>
