@@ -52,7 +52,7 @@
 			}
 			footer {
 				height: 100%;
-				padding: 0.25rem 0;
+				padding: 0.25rem 0 0.5rem;
 			}
 			footer form {
 				height: 100%;
@@ -65,6 +65,14 @@
 				border: none;
 				background: #ebedef;
 				padding: 0.5rem;
+			}
+			#lag {
+				position: absolute;
+				font-variant-numeric: tabular-nums;
+				font-style: italic;
+				font-size: 0.6rem;
+				color: #607d8b;
+				right: 1rem;
 			}
 			.chat {
 				display: flex;
@@ -121,12 +129,15 @@
 					<input type="text" placeholder="Enter message">
 					<button type="submit">SEND</button>
 				</form>
+
+				<span id="lag"></span>
 			</footer>
 		</main>
 
 		<script defer>
 			var $ = document.querySelector.bind(document);
 
+			var lag = $('#lag');
 			var form = $('form');
 			var chat = $('.chat');
 			var aside = $('aside');
@@ -150,10 +161,14 @@
 
 				console.log('[MESSAGE]', input);
 
+				if (data.time) {
+					let ms = (Date.now() - data.time | 0).toLocaleString();
+					lag.innerText = `Ping: ${ms}ms`;
+				}
+
 				switch (type) {
 					case 'user:list': {
 						users = data.list;
-						// TODO: ^merge/gossip
 						return users.forEach(new_user);
 					}
 					case 'user:join': {
