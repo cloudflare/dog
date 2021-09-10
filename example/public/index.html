@@ -44,6 +44,11 @@
 			figure.online {
 				border-left-color: #66bb6a;
 			}
+			figure.myself {
+				justify-content: space-between;
+				background-color: beige;
+				font-weight: bold;
+			}
 			main {
 				display: grid;
 				padding: 0.5rem;
@@ -211,9 +216,6 @@
 
 				toJSON('msg', { text });
 				input.value = '';
-
-				// draw own message
-				// message(uid, text);
 			}
 
 			/**
@@ -249,6 +251,11 @@
 				caption.innerText = username;
 
 				fig.classList.add('online');
+				if (username === NAME) {
+					fig.classList.add('myself');
+					caption.innerText += ' (me)';
+				}
+
 				fig.appendChild(caption);
 				aside.appendChild(fig);
 			}
