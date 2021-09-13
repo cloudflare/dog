@@ -36,13 +36,13 @@ export function abort(code: number, message?: string) {
 /**
  * Ensure the request HEADER values exist & match
  */
-export function validate(req: Request, shardid?: string) {
-	let sid = req.headers.get(HEADERS.SHARDID);
-	if (sid == null) throw new Error('Missing: Shard ID');
-	if (shardid && sid !== shardid) throw new Error('Mismatch: Shard ID');
+export function validate(req: Request, replicaid?: string) {
+	let oid = req.headers.get(HEADERS.OBJECTID);
+	if (oid == null) throw new Error('Missing: Replica ID');
+	if (replicaid && oid !== replicaid) throw new Error('Mismatch: Replica ID');
 
-	let gid = req.headers.get(HEADERS.GATEWAYID);
-	if (gid == null) throw new Error('Missing: Gateway ID');
+	let gid = req.headers.get(HEADERS.GROUPID);
+	if (gid == null) throw new Error('Missing: Group ID');
 
 	let nid = req.headers.get(HEADERS.NEIGHBORID);
 	let rid = req.headers.get(HEADERS.CLIENTID) || nid;
@@ -50,7 +50,7 @@ export function validate(req: Request, shardid?: string) {
 
 	let tid = req.headers.get(HEADERS.TARGETID);
 
-	return { gid, rid, sid, tid };
+	return { gid, rid, oid, tid };
 }
 
 /**

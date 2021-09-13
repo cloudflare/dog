@@ -1,4 +1,4 @@
-import { Shard } from 'dog';
+import { Replica } from 'dog';
 import type { Bindings } from './types';
 import type { Socket, Gossip } from 'dog';
 
@@ -22,7 +22,7 @@ type Note = Gossip.Message & {
 	type: 'intra:user:list';
 }
 
-export class Room extends Shard<Bindings> {
+export class Room extends Replica<Bindings> {
 	users = new Map<string, number>();
 
 	link(env: Bindings) {

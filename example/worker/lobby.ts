@@ -1,8 +1,7 @@
-import { Gateway } from 'dog';
-
+import { Group } from 'dog';
 import type { Bindings } from './types';
 
-export class Lobby extends Gateway<Bindings> {
+export class Lobby extends Group<Bindings> {
 	limit = 2; // max conns per SHARD stub
 
 	link(env: Bindings) {

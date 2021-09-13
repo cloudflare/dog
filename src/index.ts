@@ -1,2 +1,2 @@
-export { Gateway } from './gateway';
-export { Shard } from './shard';
+export { Group } from './group';
+export { Replica } from './replica';

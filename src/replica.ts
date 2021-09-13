@@ -7,12 +7,12 @@ import type * as DOG from 'dog';
 // ---
 
 export type ReqID = string;
-export type ShardID = string;
+export type ReplicaID = string;
 
 type Pool = Map<ReqID, DOG.State>;
 
 interface Dispatch {
-	gateway: string;
+	group: string;
 	sender: string;
 	target?: string;
 	route: string;
@@ -24,11 +24,11 @@ function send(conns: Set<WebSocket>, msg: string) {
 	for (let ws of conns) ws.send(msg);
 }
 
-export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shard<T> {
+export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Replica<T> {
 	public readonly uid: string;
 
 	readonly #pool: Pool;
-	readonly #neighbors: Set<ShardID>;
+	readonly #neighbors: Set<ReplicaID>;
 	readonly #parent: DurableObjectNamespace;
 	readonly #self: DurableObjectNamespace;
 
@@ -47,8 +47,8 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract link(bindings: T): {
-		parent: DurableObjectNamespace & DOG.Gateway<T>;
-		self: DurableObjectNamespace & DOG.Shard<T>;
+		parent: DurableObjectNamespace & DOG.Group<T>;
+		self: DurableObjectNamespace & DOG.Replica<T>;
 	};
 
 	/**
@@ -144,7 +144,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 		}
 
 		let state: DOG.State = this.#pool.get(rid) || {
-			gateway: gid,
+			group: gid,
 			socket: new Set,
 		};
 
@@ -158,20 +158,20 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 		});
 	}
 
-	// Gossip handler; respond to Gossip from another SHARD instance.
+	// Gossip handler; respond to Gossip from another REPLICA instance.
 	ongossip?(msg: DOG.Gossip.Message): Promise<DOG.Gossip.Payload> | DOG.Gossip.Payload
 
 	/**
-	 * Share some Gossip to SHARD's neighbors.
-	 * Neighboring SHARDs respond to gossip directly; via `ongossip`.
-	 * AKA, SHARD to SHARD communication.
+	 * Share some Gossip to REPLICA's neighbors.
+	 * Neighboring REPLICAs respond to gossip directly; via `ongossip`.
+	 * AKA, REPLICA to REPLICA communication.
 	 */
 	async gossip(msg: DOG.Gossip.Message): Promise<DOG.Gossip.Payload[]> {
 		if (this.#neighbors.size < 1) return [];
 
 		let list = await this.#dispatch({
-			gateway: 'Q', // ignored
-			sender: this.uid, // this shard
+			group: 'Q', // ignored
+			sender: this.uid, // this replica
 			route: ROUTES.GOSSIP,
 			body: msg == null ? msg : JSON.stringify(msg)
 		});
@@ -181,7 +181,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	}
 
 	/**
-	 * Receive a request from Gateway node
+	 * Receive a request from Group node
 	 */
 	async fetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
 		let request = new Request(input, init);
@@ -251,7 +251,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	}
 
 	/**
-	 * Share a message ONLY with this Shard's connections
+	 * Share a message ONLY with this REPLICA's connections
 	 */
 	#emit(sender: ReqID, msg: DOG.Message, self?: boolean): void {
 		if (typeof msg === 'object') {
@@ -264,9 +264,9 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	}
 
 	/**
-	 * Share a message across ALL shards w/in group
+	 * Share a message across ALL replicas within group
 	 */
-	async #broadcast(gateway: string, sender: ReqID, msg: DOG.Message, self?: boolean): Promise<void> {
+	async #broadcast(group: string, sender: ReqID, msg: DOG.Message, self?: boolean): Promise<void> {
 		let body = typeof msg === 'object'
 			? JSON.stringify(msg)
 			: msg;
@@ -274,13 +274,13 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 		this.#emit(sender, body, self);
 
 		await this.#dispatch({
-			gateway, sender, body,
+			group, sender, body,
 			route: ROUTES.BROADCAST,
 		});
 	}
 
 	/**
-	 * Construct & send a message to SHARD neighbors.
+	 * Construct & send a message to REPLICA neighbors.
 	 */
 	async #dispatch(params: Dispatch): Promise<Response[] | void> {
 		let list = [...this.#neighbors];
@@ -288,7 +288,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 
 		let commons: HeadersInit = {
 			[HEADERS.NEIGHBORID]: this.uid,
-			[HEADERS.GATEWAYID]: params.gateway,
+			[HEADERS.GROUPID]: params.group,
 			[HEADERS.CLIENTID]: params.sender,
 		};
 
@@ -300,7 +300,7 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 			list.map(sid => {
 				let stub = utils.load(this.#self, sid);
 				let headers = new Headers(commons);
-				headers.set(HEADERS.SHARDID, sid);
+				headers.set(HEADERS.OBJECTID, sid);
 				return stub.fetch(params.route, {
 					method: 'POST',
 					headers: headers,
@@ -311,9 +311,9 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 	}
 
 	/**
-	 * Send a Message to a specific Socket within a SHARD.
+	 * Send a Message to a specific Socket within a REPLICA.
 	 */
-	async #whisper(gateway: string, sender: ReqID, target: ReqID, msg: DOG.Message): Promise<void> {
+	async #whisper(group: string, sender: ReqID, target: ReqID, msg: DOG.Message): Promise<void> {
 		// TODO: ever allow this?
 		if (sender === target) return;
 
@@ -325,24 +325,24 @@ export abstract class Shard<T extends ModuleWorker.Bindings> implements DOG.Shar
 		if (state) return send(state.socket, body);
 
 		await this.#dispatch({
-			gateway, sender, target, body,
+			group, sender, target, body,
 			route: ROUTES.WHISPER
 		});
 	}
 
 	/**
-	 * Tell relevant Gateway object to -1 its count
+	 * Tell relevant Group object to -1 its count
 	 */
 	async #close(rid: ReqID, gid: string, isEmpty: boolean) {
 		let headers = new Headers;
-		headers.set(HEADERS.GATEWAYID, gid);
-		headers.set(HEADERS.SHARDID, this.uid);
+		headers.set(HEADERS.GROUPID, gid);
+		headers.set(HEADERS.OBJECTID, this.uid);
 		headers.set(HEADERS.CLIENTID, rid);
 		headers.set(HEADERS.ISEMPTY, isEmpty ? '1' : '0');
 
 		// Prepare internal request
-		// ~> notify Gateway of -1 count
-		let gateway = utils.load(this.#parent, gid);
-		await gateway.fetch(ROUTES.CLOSE, { headers });
+		// ~> notify Group of -1 count
+		let group = utils.load(this.#parent, gid);
+		await group.fetch(ROUTES.CLOSE, { headers });
 	}
 }

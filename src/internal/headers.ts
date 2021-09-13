@@ -1,13 +1,13 @@
-// The `Gateway` durable object identifer
-export const GATEWAYID = 'x-dog-gateway-identifier';
+// The `Group` durable object identifer
+export const GROUPID = 'x-dog-group-identifier';
 
 // The client/request's unique identifier
 export const CLIENTID = 'x-dog-client-identifier';
 
-// The `Shard` durable object identifier
-export const SHARDID = 'x-dog-shard-identifier';
+// The `Replica` durable object identifier
+export const OBJECTID = 'x-dog-replica-identifier';
 
-// The `Shard` identifier that is broadcasting
+// The `Replica` identifier that is broadcasting
 export const NEIGHBORID = 'x-dog-neighbor-identifier';
 
 // The `Socket` identifier for a whisper's target

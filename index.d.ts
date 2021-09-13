@@ -16,14 +16,14 @@ export namespace Gossip {
 }
 
 export interface State {
-	gateway: string;
+	group: string;
 	socket: Set<WebSocket>;
 }
 
 export interface Socket {
 	/**
 	 * The request identifier.
-	 * @see {Gateway.identify}
+	 * @see {Group.identify}
 	 */
 	uid: string;
 	/**
@@ -35,7 +35,7 @@ export interface Socket {
 	 */
 	close: WebSocket['close'];
 	/**
-	 * Send a message to other WebSockets owned by the SHARD.
+	 * Send a message to other WebSockets owned by the Replica.
 	 * @param {boolean} [self] Send the message to the sender?
 	 */
 	emit(msg: Message, self?: boolean): void;
@@ -53,18 +53,18 @@ export interface Socket {
 // @see https://github.com/cloudflare/workers-types/pull/102
 export type Bindings = Record<string, KVNamespace | DurableObjectNamespace | CryptoKey | string>;
 
-export abstract class Shard<T extends Bindings> {
+export abstract class Replica<T extends Bindings> {
 	readonly uid: string;
 
 	constructor(state: DurableObjectState, env: T);
 
 	/**
-	 * Specify which `Gateway` class is the target.
+	 * Specify which `Group` class is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract link(bindings: T): {
-		parent: DurableObjectNamespace & Gateway<T>;
-		self: DurableObjectNamespace & Shard<T>;
+		parent: DurableObjectNamespace & Group<T>;
+		self: DurableObjectNamespace & Replica<T>;
 	};
 
 	/**
@@ -80,7 +80,7 @@ export abstract class Shard<T extends Bindings> {
 	onclose?(socket: Socket): Promise<void> | void;
 	/** The WebSocket client was closed due to an error. */
 	onerror?(socket: Socket): Promise<void> | void;
-	/** The WebSocket client sent the SHARD a message. */
+	/** The WebSocket client sent the Replica a message. */
 	onmessage?(socket: Socket, data: string): Promise<void> | void;
 
 	/**
@@ -89,39 +89,39 @@ export abstract class Shard<T extends Bindings> {
 	connect(req: Request): Promise<Response>;
 
 	/**
-	 * Respond to another SHARD's gossip.
+	 * Respond to another Replica's gossip.
 	 * @NOTE Must return a JSON-serializable value.
 	 */
 	ongossip?(msg: Gossip.Message): Promise<Gossip.Payload> | Gossip.Payload;
 
 	/**
-	 * Send a message directly to other SHARDs.
+	 * Send a message directly to other Replicas.
 	 * A `Gossip.Message` must be a JSON object.
-	 * Returns a list of `Gossip.Payload`s, one from each SHARD sibling.
+	 * Returns a list of `Gossip.Payload`s, one from each Replica sibling.
 	 * @NOTE Peer-to-peer communication; does not involve client connections.
 	 */
 	gossip<M extends Gossip.Message>(msg: M): Promise<Gossip.Payload[]>;
 
 	/**
-	 * Receives a request from a Gateway object.
+	 * Receives a request from a Group object.
 	 * @IMPORTANT Do NOT define your own `fetch` method!
 	 */
 	fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
 }
 
-export abstract class Gateway<T extends ModuleWorker.Bindings> {
+export abstract class Group<T extends ModuleWorker.Bindings> {
 	abstract limit: number;
 	readonly uid: string;
 
 	constructor(state: DurableObjectState, env: T);
 
 	/**
-	 * Specify which `Shard` class extension is the target.
+	 * Specify which `Replica` class extension is the target.
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract link(bindings: T): {
-		child: DurableObjectNamespace & Shard<T>;
-		self: DurableObjectNamespace & Gateway<T>;
+		child: DurableObjectNamespace & Replica<T>;
+		self: DurableObjectNamespace & Group<T>;
 	};
 
 	/**
@@ -131,7 +131,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> {
 	abstract identify(req: Request): Promise<string> | string;
 
 	/**
-	 * Generate a `DurableObjectId` for the shard cluster.
+	 * Generate a `DurableObjectId` for the Replica cluster.
 	 * @default target.newUniqueId()
 	 */
 	clusterize(req: Request, target: DurableObjectNamespace): Promise<DurableObjectId> | DurableObjectId;

@@ -2,23 +2,23 @@ import * as HEADERS from './internal/headers';
 import * as ROUTES from './internal/routes';
 import * as utils from './internal/utils';
 
-import type { ReqID, ShardID } from './shard';
+import type { ReqID, ReplicaID } from './replica';
 import type * as DOG from 'dog';
 
 // NOTE: Private
 type LiveCount = number;
-type BucketTuple = [ShardID, LiveCount];
+type BucketTuple = [ReplicaID, LiveCount];
 
-export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Gateway<T> {
+export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Group<T> {
 	public abstract limit: number;
 	public readonly uid: string;
 
-	readonly #mapping: Map<ReqID, ShardID>;
+	readonly #mapping: Map<ReqID, ReplicaID>;
 	readonly #child: DurableObjectNamespace;
-	readonly #kids: Map<ShardID, LiveCount>;
+	readonly #kids: Map<ReplicaID, LiveCount>;
 
-	#sorted: ShardID[];
-	#current?: ShardID;
+	#sorted: ReplicaID[];
+	#current?: ReplicaID;
 
 	constructor(state: DurableObjectState, env: T) {
 		this.uid = state.id.toString();
@@ -31,12 +31,12 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	}
 
 	/**
-	 * Specify which `Shard` class extension is the target.
+	 * Define Group / Replica relationships.
 	 * @NOTE User-supplied logic/function.
 	 */
 	abstract link(bindings: T): {
-		child: DurableObjectNamespace & DOG.Shard<T>;
-		self: DurableObjectNamespace & DOG.Gateway<T>;
+		child: DurableObjectNamespace & DOG.Replica<T>;
+		self: DurableObjectNamespace & DOG.Group<T>;
 	};
 
 	/**
@@ -46,7 +46,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	abstract identify(req: Request): Promise<ReqID> | ReqID;
 
 	/**
-	 * Generate a `DurableObjectId` for the shard cluster
+	 * Generate a `DurableObjectId` for the next Replica in cluster.
 	 */
 	clusterize(req: Request, target: DurableObjectNamespace): Promise<DurableObjectId> | DurableObjectId {
 		return target.newUniqueId();
@@ -59,7 +59,7 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		let request = new Request(input, init);
 		let { pathname } = new URL(request.url, 'foo://');
 
-		// ~> internal SHARD request
+		// ~> internal REPLICA request
 		if (pathname === ROUTES.CLOSE) {
 			try {
 				return await this.#close(request);
@@ -75,9 +75,9 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		if (sid != null) alive = this.#kids.get(sid);
 
 		if (alive != null && this.limit >= ++alive) {
-			// use this shard if found & not over limit
+			// use this replica if found & not over limit
 		} else {
-			// if aware of existing shards, sort & get most free
+			// if aware of existing replicas, sort & get most free
 			// NOTE: `sync` only keeps buckets if `alive` <= limit
 			let pair = this.#sorted.length > 0 && await this.#sort();
 
@@ -97,18 +97,18 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 		this.#kids.set(sid, alive);
 
 		// Attach indentifiers / hash keys
-		request.headers.set(HEADERS.GATEWAYID, this.uid);
+		request.headers.set(HEADERS.GROUPID, this.uid);
 		request.headers.set(HEADERS.CLIENTID, rid);
-		request.headers.set(HEADERS.SHARDID, sid);
+		request.headers.set(HEADERS.OBJECTID, sid);
 
 		return utils.load(this.#child, sid).fetch(request);
 	}
 
 	/**
-	 * Notify existing SHARDs of a new neighbor.
-	 * @param {ShardID} nid  The newly created SHARD identifier.
+	 * Notify existing REPLICAs of a new neighbor.
+	 * @param {ReplicaID} nid  The newly created REPLICA identifier.
 	 */
-	async #welcome(nid: ShardID): Promise<void> {
+	async #welcome(nid: ReplicaID): Promise<void> {
 		// get read-only copy
 		let items = [...this.#kids.keys()];
 		this.#sorted.unshift(nid);
@@ -125,13 +125,13 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	}
 
 	/**
-	 * Introduce `stranger` to the existing `target` shard.
+	 * Introduce `stranger` to the existing `target` replica.
 	 */
-	#introduce(stranger: ShardID, target: ShardID): Promise<Response> {
+	#introduce(stranger: ReplicaID, target: ReplicaID): Promise<Response> {
 		let headers = new Headers;
-		headers.set(HEADERS.SHARDID, target);
+		headers.set(HEADERS.OBJECTID, target);
 		headers.set(HEADERS.NEIGHBORID, stranger);
-		headers.set(HEADERS.GATEWAYID, this.uid);
+		headers.set(HEADERS.GROUPID, this.uid);
 
 		let stub = utils.load(this.#child, target);
 		return stub.fetch(ROUTES.NEIGHBOR, { headers });
@@ -149,13 +149,13 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 			tuples.sort((a, b) => a[1] - b[1]);
 		}
 
-		let i=0, list: ShardID[] = [];
+		let i=0, list: ReplicaID[] = [];
 		let bucket: BucketTuple | void;
 		for (; i < tuples.length; i++) {
 			// ignore buckets w/ active >= limit
 			if (tuples[i][1] < this.limit) {
 				if (!bucket) bucket = tuples[i];
-				list.push(tuples[i][0]); // keep shard id
+				list.push(tuples[i][0]); // keep replica id
 			}
 		}
 
@@ -165,14 +165,14 @@ export abstract class Gateway<T extends ModuleWorker.Bindings> implements DOG.Ga
 	}
 
 	async #close(req: Request): Promise<Response> {
-		var { rid, sid, gid } = utils.validate(req);
-		if (gid !== this.uid) throw new Error('Mismatch: Gateway ID');
+		var { rid, oid, gid } = utils.validate(req);
+		if (gid !== this.uid) throw new Error('Mismatch: Group ID');
 
-		let alive = this.#kids.get(sid);
-		if (alive == null) throw new Error('Unknown: Shard ID');
+		let alive = this.#kids.get(oid);
+		if (alive == null) throw new Error('Unknown: Replica ID');
 
 		alive = Math.max(0, --alive);
-		this.#kids.set(sid, alive);
+		this.#kids.set(oid, alive);
 
 		if (req.headers.get(HEADERS.ISEMPTY) === '1') {
 			this.#mapping.delete(rid);
