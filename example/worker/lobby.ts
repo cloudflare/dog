@@ -11,12 +11,6 @@ export class Lobby extends Group<Bindings> {
 		};
 	}
 
-	// Generate client unique identifier
-	identify(req: Request): string {
-		let { searchParams } = new URL(req.url);
-		return searchParams.get('u') || 'anon';
-	}
-
 	// Optional: Only create SHARDs in the "eu" jurisdiction
 	// clusterize(req: Request, target: DurableObjectNamespace): DurableObjectId {
 	// 	return target.newUniqueId({ jurisdiction: 'eu' });
