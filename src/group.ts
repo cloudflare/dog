@@ -2,8 +2,8 @@ import * as HEADERS from './internal/headers';
 import * as ROUTES from './internal/routes';
 import * as utils from './internal/utils';
 
-import type { ReqID, ReplicaID } from './replica';
 import type * as DOG from 'dog';
+import type { RequestID, ReplicaID } from 'dog';
 
 // NOTE: Private
 type LiveCount = number;
@@ -13,8 +13,8 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 	public abstract limit: number;
 	public readonly uid: string;
 
-	readonly #mapping: Map<ReqID, ReplicaID>;
 	readonly #child: DurableObjectNamespace;
+	readonly #mapping: Map<RequestID, ReplicaID>;
 	readonly #kids: Map<ReplicaID, LiveCount>;
 
 	#sorted: ReplicaID[];
@@ -43,7 +43,7 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 	 * Generate a unique identifier for the request.
 	 * @NOTE User-supplied logic/function.
 	 */
-	abstract identify(req: Request): Promise<ReqID> | ReqID;
+	abstract identify(req: Request): Promise<RequestID> | RequestID;
 
 	/**
 	 * Generate a `DurableObjectId` for the next Replica in cluster.

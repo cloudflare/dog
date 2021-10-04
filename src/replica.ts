@@ -3,13 +3,11 @@ import * as ROUTES from './internal/routes';
 import * as HEADERS from './internal/headers';
 
 import type * as DOG from 'dog';
+import type { RequestID, ReplicaID } from 'dog';
 
 // ---
 
-export type ReqID = string;
-export type ReplicaID = string;
-
-type Pool = Map<ReqID, DOG.State>;
+type Pool = Map<RequestID, DOG.State>;
 
 interface Dispatch {
 	group: string;
@@ -253,7 +251,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 	/**
 	 * Share a message ONLY with this REPLICA's connections
 	 */
-	#emit(sender: ReqID, msg: DOG.Message, self?: boolean): void {
+	#emit(sender: RequestID, msg: DOG.Message, self?: boolean): void {
 		if (typeof msg === 'object') {
 			msg = JSON.stringify(msg);
 		}
@@ -266,7 +264,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 	/**
 	 * Share a message across ALL replicas within group
 	 */
-	async #broadcast(group: string, sender: ReqID, msg: DOG.Message, self?: boolean): Promise<void> {
+	async #broadcast(group: string, sender: RequestID, msg: DOG.Message, self?: boolean): Promise<void> {
 		let body = typeof msg === 'object'
 			? JSON.stringify(msg)
 			: msg;
@@ -313,7 +311,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 	/**
 	 * Send a Message to a specific Socket within a REPLICA.
 	 */
-	async #whisper(group: string, sender: ReqID, target: ReqID, msg: DOG.Message): Promise<void> {
+	async #whisper(group: string, sender: RequestID, target: RequestID, msg: DOG.Message): Promise<void> {
 		// TODO: ever allow this?
 		if (sender === target) return;
 
@@ -333,7 +331,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 	/**
 	 * Tell relevant Group object to -1 its count
 	 */
-	async #close(rid: ReqID, gid: string, isEmpty: boolean) {
+	async #close(rid: RequestID, gid: string, isEmpty: boolean) {
 		let headers = new Headers;
 		headers.set(HEADERS.GROUPID, gid);
 		headers.set(HEADERS.OBJECTID, this.uid);

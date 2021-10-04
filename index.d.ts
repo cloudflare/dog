@@ -8,6 +8,10 @@ declare namespace JSON {
 // @todo support arraybuffer types
 export type Message = JSON.Object | string;
 
+export type RequestID = string;
+export type GroupID = string;
+export type ReplicaID = string;
+
 export namespace Gossip {
 	type Message = {
 		[key: string]: JSON.Value;
