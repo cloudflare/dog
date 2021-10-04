@@ -140,3 +140,14 @@ export abstract class Group<T extends ModuleWorker.Bindings> {
 	 */
 	fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
 }
+
+export interface Family<T extends ModuleWorker.Bindings> {
+	parent: DurableObjectNamespace & Group<T>;
+	child: DurableObjectNamespace & Replica<T>;
+}
+
+export function identify<T extends ModuleWorker.Bindings>(
+	groupid: DurableObjectId,
+	requestid: RequestID,
+	family: Family<T>,
+): Promise<DurableObjectStub>;

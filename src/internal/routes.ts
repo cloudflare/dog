@@ -12,3 +12,6 @@ export const WHISPER = '/~$~/whisper';
 
 // Sending gossip between REPLICAs
 export const GOSSIP = '/~$~/gossip';
+
+// Identifying which REPLICA to use
+export const IDENTIFY = '/~$~/identify';
