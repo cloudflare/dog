@@ -129,12 +129,6 @@ export abstract class Group<T extends ModuleWorker.Bindings> {
 	};
 
 	/**
-	 * Generate a unique identifier for the request.
-	 * @NOTE User-supplied logic/function.
-	 */
-	abstract identify(req: Request): Promise<string> | string;
-
-	/**
 	 * Generate a `DurableObjectId` for the Replica cluster.
 	 * @default target.newUniqueId()
 	 */

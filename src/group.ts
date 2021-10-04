@@ -40,12 +40,6 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 	};
 
 	/**
-	 * Generate a unique identifier for the request.
-	 * @NOTE User-supplied logic/function.
-	 */
-	abstract identify(req: Request): Promise<RequestID> | RequestID;
-
-	/**
 	 * Generate a `DurableObjectId` for the next Replica in cluster.
 	 */
 	clusterize(req: Request, target: DurableObjectNamespace): Promise<DurableObjectId> | DurableObjectId {
