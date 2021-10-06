@@ -12,5 +12,16 @@ export const identify: typeof DOG.identify = async function (gid, rid, family) {
 
 	let text = await group.fetch(request).then(r => r.text());
 	let sid = family.child.idFromString(text);
-	return family.child.get(sid);
+	let stub = family.child.get(sid);
+
+	let prev = stub.fetch.bind(stub);
+	stub.fetch = function (input: RequestInfo, init?: RequestInit) {
+		let request = new Request(input, init);
+		request.headers.set(HEADERS.CLIENTID, rid);
+		request.headers.set(HEADERS.OBJECTID, stub.id.toString());
+		request.headers.set(HEADERS.GROUPID, gid.toString());
+		return prev(request);
+	}
+
+	return stub;
 }
