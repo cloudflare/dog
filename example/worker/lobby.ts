@@ -2,7 +2,7 @@ import { Group } from 'dog';
 import type { Bindings } from './types';
 
 export class Lobby extends Group<Bindings> {
-	limit = 2; // max conns per SHARD stub
+	limit = 2; // max conns per REPLICA stub
 
 	link(env: Bindings) {
 		return {
@@ -11,7 +11,7 @@ export class Lobby extends Group<Bindings> {
 		};
 	}
 
-	// Optional: Only create SHARDs in the "eu" jurisdiction
+	// Optional: Only create REPLICAs in the "eu" jurisdiction
 	// clusterize(req: Request, target: DurableObjectNamespace): DurableObjectId {
 	// 	return target.newUniqueId({ jurisdiction: 'eu' });
 	// }
