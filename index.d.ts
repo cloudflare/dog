@@ -8,6 +8,10 @@ declare namespace JSON {
 // @todo support arraybuffer types
 export type Message = JSON.Object | string;
 
+export type RequestID = string;
+export type GroupID = string;
+export type ReplicaID = string;
+
 export namespace Gossip {
 	type Message = {
 		[key: string]: JSON.Value;
@@ -125,12 +129,6 @@ export abstract class Group<T extends ModuleWorker.Bindings> {
 	};
 
 	/**
-	 * Generate a unique identifier for the request.
-	 * @NOTE User-supplied logic/function.
-	 */
-	abstract identify(req: Request): Promise<string> | string;
-
-	/**
 	 * Generate a `DurableObjectId` for the Replica cluster.
 	 * @default target.newUniqueId()
 	 */
@@ -142,3 +140,14 @@ export abstract class Group<T extends ModuleWorker.Bindings> {
 	 */
 	fetch(input: RequestInfo, init?: RequestInit): Promise<Response>;
 }
+
+export interface Family<T extends ModuleWorker.Bindings> {
+	parent: DurableObjectNamespace & Group<T>;
+	child: DurableObjectNamespace & Replica<T>;
+}
+
+export function identify<T extends ModuleWorker.Bindings>(
+	groupid: DurableObjectId,
+	requestid: RequestID,
+	family: Family<T>,
+): Promise<DurableObjectStub>;

@@ -2,8 +2,8 @@ import * as HEADERS from './internal/headers';
 import * as ROUTES from './internal/routes';
 import * as utils from './internal/utils';
 
-import type { ReqID, ReplicaID } from './replica';
 import type * as DOG from 'dog';
+import type { RequestID, ReplicaID } from 'dog';
 
 // NOTE: Private
 type LiveCount = number;
@@ -13,8 +13,8 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 	public abstract limit: number;
 	public readonly uid: string;
 
-	readonly #mapping: Map<ReqID, ReplicaID>;
 	readonly #child: DurableObjectNamespace;
+	readonly #mapping: Map<RequestID, ReplicaID>;
 	readonly #kids: Map<ReplicaID, LiveCount>;
 
 	#sorted: ReplicaID[];
@@ -40,12 +40,6 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 	};
 
 	/**
-	 * Generate a unique identifier for the request.
-	 * @NOTE User-supplied logic/function.
-	 */
-	abstract identify(req: Request): Promise<ReqID> | ReqID;
-
-	/**
 	 * Generate a `DurableObjectId` for the next Replica in cluster.
 	 */
 	clusterize(req: Request, target: DurableObjectNamespace): Promise<DurableObjectId> | DurableObjectId {
@@ -59,7 +53,6 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 		let request = new Request(input, init);
 		let { pathname } = new URL(request.url, 'foo://');
 
-		// ~> internal REPLICA request
 		if (pathname === ROUTES.CLOSE) {
 			try {
 				return await this.#close(request);
@@ -68,8 +61,21 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 			}
 		}
 
-		let rid = await this.identify(request);
+		if (pathname === ROUTES.IDENTIFY) {
+			try {
+				// fake objectid to use utility
+				request.headers.set(HEADERS.OBJECTID, '');
+				let { rid } = utils.validate(request);
+				return this.#identify(request, rid);
+			} catch (err) {
+				return utils.abort(400, (err as Error).message);
+			}
+		}
 
+		return utils.abort(404);
+	}
+
+	async #identify(request: Request, rid: RequestID): Promise<Response> {
 		let alive: number | void;
 		let sid = this.#mapping.get(rid) || this.#current || this.#sorted[0];
 		if (sid != null) alive = this.#kids.get(sid);
@@ -96,12 +102,7 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 		this.#mapping.set(rid, sid);
 		this.#kids.set(sid, alive);
 
-		// Attach indentifiers / hash keys
-		request.headers.set(HEADERS.GROUPID, this.uid);
-		request.headers.set(HEADERS.CLIENTID, rid);
-		request.headers.set(HEADERS.OBJECTID, sid);
-
-		return utils.load(this.#child, sid).fetch(request);
+		return new Response(sid);
 	}
 
 	/**

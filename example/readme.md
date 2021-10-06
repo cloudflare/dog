@@ -41,7 +41,7 @@ Currently, when a user visits `localhost:8787`, they enter an arbitrary username
 
 The `Lobby` identifies each request by its `?u` query parameter. Of course, in a real application this would be an entity identifier, accessed by an `Authorization` header or a parsed cookie.
 
-The underlying `Shard` allows and accepts multiple connections sharing the same username. For a chatroom, this can surface as `lukeed` connecting through a desktop _and_ a mobile client. The `lukeed` user will/should expect to see any messages meant for them on all connected devices, including shard-only (`/group`) and whispered (`/w`) messages. However, this behavior might not be welcome in other applications – this is why `Gateway.identify` is user-specified, deferring full uniqueness control (and full responsibility) to the developer.
+The underlying `Replica` allows and accepts multiple connections sharing the same username. For a chatroom, this can surface as `lukeed` connecting through a desktop _and_ a mobile client. The `lukeed` user will/should expect to see any messages meant for them on all connected devices, including replica-only (`/group`) and whispered (`/w`) messages. However, this behavior might not be welcome in other applications – this is why `Gateway.identify` is user-specified, deferring full uniqueness control (and full responsibility) to the developer.
 
 In this example, when a connection is established, the client sends a `"req:user:list"` query. The `Room` server owning the connection sees this query and then _gossips_ with the other `Room` instances to compile a list of connected users. The `Room` then sends this list _only_ to the new connection (via `socket.send`).
 
@@ -54,6 +54,6 @@ When connected to the chatroom, you may invoke the following slash commands whic
 
 * `/w <userid> <message>` <br> `/msg <userid> <message>` <br>Sends a message to a specific user – and **only** that user. Utilitizes the `socket.whisper` method.
 
-* `/g <message>` <br> `/group <userid> <message>` <br>Sends a message to the _group_ which, in this case, refers to the users that are hosted on the same `Room / Shard` as the sender. Interally, this utilizes the `socket.emit` method.
+* `/g <message>` <br> `/group <userid> <message>` <br>Sends a message to the _group_ which, in this case, refers to the users that are hosted on the same `Room / Replica` as the sender. Interally, this utilizes the `socket.emit` method.
 
 * `/a <message>` <br> `/all <userid> <message>` <br>This is the default; AKA, it's the same as not including a slash command at all. Delivers a message to **everyone** in the chatroom, because the chatroom is structured as a single cluster. Internally, this utilizes the `socket.broadcast` method.
