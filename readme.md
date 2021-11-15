@@ -9,21 +9,21 @@
 * Includes `Replica`-to-`Replica` (peer-to-peer) communication
 * Ready for strongly-typed, strict TypeScript usage
 * Allows an active connection to:
-    * [`broadcast`](#todo) messages to the entire cluster
-    * [`emit`](#todo) messages to `Replica`-owned connections
-    * send a [`whisper`](#todo) a single connection within the cluster
+    * `broadcast` messages to the entire cluster
+    * `emit` messages to `Replica`-owned connections
+    * send a `whisper` a single connection within the cluster
 
 ## Overview
 
-With DOG, it's easy to setup named clusters of related [Durable Objects](#TODO). Each cluster is controlled by a [`Group`](#TODO), which directs an incoming `Request` to a specific [`Replica`](#TODO) instance. A `Group` adheres to the user-defined [limit](#todo) of active connections per `Replica` and, in doing so, will reuse existing or create new `Replica` instances as necessary.
+With DOG, it's easy to setup named clusters of related [Durable Objects](https://developers.cloudflare.com/workers/runtime-apis/durable-objects). Each cluster is controlled by a [`Group`](#group), which directs an incoming `Request` to a specific [`Replica`](#replica) instance. A `Group` adheres to the user-defined [limit](#group) of active connections per `Replica` and, in doing so, will reuse existing or create new `Replica` instances as necessary.
 
 DOG includes convenience methods that allow a `Replica` to directly communicate with another `Replica` belonging to the same `Group` – effectively a peer-to-peer/gossip network. Additionally, when dealing with active client connections, a `Replica` class allows you to:
 
-* [broadcast](#todo) a message to all active connections within the _entire_ cluster
-* [emit](#todo) a message only to active connections owned by the `Replica` itself
-* [whisper](#todo) a message to a single, targeted connection (via your [identification system](#todo)); even if it's owned by another `Replica` instance!
+* `broadcast` a message to all active connections within the _entire_ cluster
+* `emit` a message only to active connections owned by the `Replica` itself
+* `whisper` a message to a single, targeted connection (via your own identification system); even if it's owned by another `Replica` instance!
 
-`Group` and `Replica` are both [abstract classes](https://www.typescriptlang.org/docs/handbook/classes.html#abstract-classes), which means that you're allowed — **and required** — to extend them with your own application needs. You may define your own class methods, add your own state properties, or use [Durable Storage](#TODO) to fulfill your needs.
+`Group` and `Replica` are both [abstract classes](https://www.typescriptlang.org/docs/handbook/classes.html#abstract-classes), which means that you're allowed — **and required** — to extend them with your own application needs. You may define your own class methods, add your own state properties, or use [Durable Storage](https://developers.cloudflare.com/workers/runtime-apis/durable-objects#transactional-storage-api) to fulfill your needs.
 
 Please see [Usage](#usage), the [API](#api) docs, and the [example application](/example/worker) for further information!
 
@@ -31,7 +31,7 @@ Please see [Usage](#usage), the [API](#api) docs, and the [example application](
 ## Install
 
 ```sh
-$ npm install dog@next
+$ npm install dog
 ```
 
 
@@ -40,7 +40,7 @@ $ npm install dog@next
 > Refer to the [`/example`](/example) for a complete Chat Room application.
 
 ```ts
-import { Group, Replica } from 'dog';
+import { identify, Group, Replica } from 'dog';
 
 // deployed as `POOL` binding
 export class Pool extends Group {
@@ -51,14 +51,6 @@ export class Pool extends Group {
       child: env.TASK, // receiving Replica
       self: env.POOL, // self-identifier
     };
-  }
-
-  // Generate unique client identifier
-  // NOTE: Purely application-specific logic
-  identify(req: Request): string {
-    let auth = req.headers.get('authorization');
-    let token = auth && auth.replace(/^[^\s]+\s+/, '');
-    return token || req.headers.get('cf-connecting-ip') || 'anon';
   }
 }
 
@@ -71,8 +63,33 @@ export class Task extends Replica {
     };
   }
 
+  async onmessage(socket, data) {
+    let message = JSON.parse(data);
+    console.log('[task] onmessage', message);
+
+    if (message.type === 'crawl:url') {
+      let { url } = message;
+      // ...
+      let output = { url, done: true };
+      // alert everyone that the task is complete
+      return socket.broadcast(JSON.stringify(output), true);
+    }
+
+    // other events
+  }
+
   receive(req) {
-    // TODO: come up w/ succinct example, webcrawler?
+    // Receive & handle the request
+    // NOTE: This is the original, forwarded request
+    let { pathname } = new URL(req.url);
+
+    // Rely on internal util for WebSocket upgrade
+    if (pathname === '/ws') return this.connect(req);
+
+    // Any other custom routing behavior(s)
+    if (pathname === '/') return new Response('OK');
+
+    return toError('Unknown path', 404);
   }
 }
 
@@ -91,29 +108,47 @@ export default {
     if (taskname.length < 1) return toError('Invalid task name', 400);
 
     // Generate Durable Object ID from taskname
-    let id = env.POOL.idFromName(taskname);
+    let group = env.POOL.idFromName(taskname);
 
-    // Load the Durable Object & forward the request
-    return env.POOL.get(id).fetch(req);
+    // Custom request identifier logic
+    let reqid = req.headers.get('x-request-id');
+
+    // Identify the `Replica` stub to use
+    let replica = await identify(group, reqid, {
+      parent: env.POOL,
+      child: env.TASK,
+    });
+
+    // (Optional) Save reqid -> replica.id
+    // await KV.put(`req::${reqid}`, replica.id.toString());
+
+    // Send request to the Replica instance
+    return replica.fetch(req);
   }
 }
 ```
 
 ## API
 
+### `identify`
+
+> **Note:** Refer to the [TypeScript definitions](/index.d.ts#L149) for more information.
+
+The utility function to identify a `Replica` to be used and, if necessary, will create a new `Replica` if none are available. Returns the `Replica` stub directly.
+
+
 ### `Group`
 
-> **Note:** Refer to the [TypeScript definitions](/index.d.ts#L112) for more information.
+> **Note:** Refer to the [TypeScript definitions](/index.d.ts#L116) for more information.
 
 ***Required:***
 
 * `limit: number` – the maximum number of active connections a `Replica` can handle
 * `link(env: Bindings): { self, child }` – define the relationships between this `Group` and its `Replica` child class
-* `identify(req: Request): Promise<string> | string` – a user-supplied method to identify an incoming request
 
-A `Group` is initial coordinator for the cluster. It calls the user-supplied `identify` method to determine a request identifier, `ReqID`. If the `ReqID` has been seen before, the Group will attempt to target the same Replica that the `ReqID` was previously connected to. If the `ReqID` is unknown, the Group will send the request to the least-utilized `Replica` instance.
+A `Group` is initial coordinator for the cluster. It receives a user-supplied request identifier, `ReqID`, and replies with the Durable Object ID for the `Replica` instance to be used. If the `ReqID` has been seen before, the Group will attempt to target the same Replica that the `ReqID` was previously connected to. If the `ReqID` is unknown, the Group will send the request to the least-utilized `Replica` instance or generate a new `Replica` ID to be used.
 
-Afer a `Replica` instance has been targeted, the Group verifies that the `Replica` actually has availability for the request, as determined by the user-supplied `limit` value. If a new Replica instance needs to be created, the Group's `clusterize()` method is called to generate a new `Replica` instance identifier. You may override this method with your own logic – for example, including a [jurisdiction](#todo) – but by default, the Group calls `newUniqueId()` for a system-guaranteed identifier.
+When targeting an existing `Replica` instance, the Group verifies that the `Replica` actually has availability for the request, as determined by the user-supplied `limit` value. If a new Replica instance needs to be created, the Group's `clusterize()` method is called to generate a new `Replica` instance identifier. You may override this method with your own logic – for example, including a [jurisdiction](https://developers.cloudflare.com/workers/runtime-apis/durable-objects#restricting-objects-to-a-jurisdiction) – but by default, the Group calls `newUniqueId()` for a system-guaranteed identifier.
 
 The number of active connections within each `Replica` instance is automatically tracked and shared between the `Replica` and its `Group` parent. The `Replica`'s count is decremented when the connection is closed. This means that when a `Replica` works with WebSockets, open connections continue to reserve `Replica` quota until closed. Non-upgraded HTTP connections close and decrement the `Replica` count as soon as a `Response` is returned.
 
@@ -124,7 +159,7 @@ You may attach any additional state and/or methods to your `Group` class extensi
 
 ### `Replica`
 
-> **Note:** Refer to the [TypeScript definitions](/index.d.ts#56) for more information.
+> **Note:** Refer to the [TypeScript definitions](/index.d.ts#60) for more information.
 
 ***Required:***
 
@@ -142,11 +177,12 @@ If an incoming request to a `Replica` is not an internal DOG event, the request 
 <!-- TODO: actual graphic -->
 ```
 client request
-└──> Group#fetch (internal)
-      │   ├──> Group#identify
+└──> dog.identify(...)
+      │   ├──> Group#fetch (internal)
       │   └──> Group#clusterize (optional)
-      └──> Replica#fetch (internal)
-            └──> Replica#receive
+      └──> Replica
+          └──> Replica.fetch (user)
+              └──> Replica#receive
 ```
 
 Your `receive` method is the final handler and decides what the `Replica` actually does.
@@ -162,7 +198,8 @@ export class Counter extends Replica {
   #counts = new Map<string, number>;
 
   onopen(socket) {
-    // via Group#identify
+    // via dog.identify
+    // ~> your own ReqID
     let reqid = socket.uid;
     this.#counts.set(reqid, 0);
 
@@ -255,9 +292,9 @@ export class Counter extends Replica {
 
   ongossip(msg) {
     // Return array of tuples: Array<[string, number]>
-		if (msg.type === 'ask:scores') return [...this.#counts];
-		throw new Error(`Missing "${msg.type}" handler in ongossip`);
-	}
+    if (msg.type === 'ask:scores') return [...this.#counts];
+    throw new Error(`Missing "${msg.type}" handler in ongossip`);
+  }
 
   // ...
 }
