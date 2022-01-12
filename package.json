@@ -3,7 +3,7 @@
   "type": "module",
   "version": "1.0.0",
   "repository": "lukeed/dog",
-  "description": "Durable Object Gateway",
+  "description": "Durable Object Groups",
   "types": "index.d.ts",
   "module": "index.js",
   "license": "MIT",
