@@ -135,6 +135,15 @@ export abstract class Group<T extends ModuleWorker.Bindings> {
 	clusterize(req: Request, target: DurableObjectNamespace): Promise<DurableObjectId> | DurableObjectId;
 
 	/**
+	 * Receive the HTTP request if not an internal route.
+	 * @NOTE Unlike `Replica.receive`, this is optionally defined.
+	 *       Useful for supply custom routing/handler logic if the
+	 *       incoming `Request` was not significant to the DOG.
+	 * @default utils.abort(404)
+	 */
+	receive(req: Request): Promise<Response> | Response;
+
+	/**
 	 * Receives the initial request & figures out where to send it.
 	 * @NOTE User should NOT redeclare/override this method.
 	 */

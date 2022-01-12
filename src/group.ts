@@ -39,6 +39,10 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 		self: DurableObjectNamespace & DOG.Group<T>;
 	};
 
+	receive(req: Request): Response {
+		return utils.abort(404);
+	}
+
 	/**
 	 * Generate a `DurableObjectId` for the next Replica in cluster.
 	 */
@@ -72,7 +76,7 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 			}
 		}
 
-		return utils.abort(404);
+		return this.receive(request);
 	}
 
 	async #identify(request: Request, rid: RequestID): Promise<Response> {
@@ -150,8 +154,9 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 			tuples.sort((a, b) => a[1] - b[1]);
 		}
 
-		let i=0, list: ReplicaID[] = [];
 		let bucket: BucketTuple | void;
+		let i=0, list: ReplicaID[] = [];
+
 		for (; i < tuples.length; i++) {
 			// ignore buckets w/ active >= limit
 			if (tuples[i][1] < this.limit) {
