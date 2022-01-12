@@ -35,10 +35,48 @@ export class Room extends Replica<Bindings> {
 	async receive(req: Request) {
 		console.log('[ HELLO ][receive] req.url', req.url);
 
-		let { pathname } = new URL(req.url);
+		let { pathname, searchParams } = new URL(req.url);
 
 		if (pathname === '/ws') {
 			return this.connect(req);
+		}
+
+		if (pathname === '/broadcast') {
+			await this.broadcast({
+				type: 'user:msg',
+				from: 'HTTP',
+				text: 'SENT VIA "/broadcast" HTTP route',
+				time: Date.now(),
+			});
+
+			return new Response('DONE');
+		}
+
+		if (pathname === '/whisper') {
+			let target = searchParams.get('target') || 'aaa';
+
+			await this.whisper(target, {
+				type: 'user:msg',
+				from: 'HTTP',
+				text: 'SENT VIA "/whisper" HTTP route',
+				time: Date.now(),
+				meta: 'whisper',
+				to: target,
+			});
+
+			return new Response('DONE');
+		}
+
+		if (pathname === '/emit') {
+			this.emit({
+				type: 'user:msg',
+				from: 'HTTP',
+				text: 'SENT VIA "/emit" HTTP route',
+				time: Date.now(),
+				meta: 'group'
+			});
+
+			return new Response('DONE');
 		}
 
 		// NOTE: can employ whatever routing logic

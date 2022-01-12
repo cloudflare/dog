@@ -93,6 +93,24 @@ export abstract class Replica<T extends Bindings> {
 	connect(req: Request): Promise<Response>;
 
 	/**
+	 * Send a message (via HTTP) to WebSockets owned by the Replica
+	 * @NOTE This is the HTTP-accessible version of `Socket.emit`
+	 */
+	emit(msg: Message): void;
+
+	/**
+	 * Send a message (via HTTP) to ALL WebSockets within the CLUSTER.
+	 * @NOTE This is the HTTP-accessible version of `Socket.broadcast`
+	 */
+	broadcast(msg: Message): Promise<void>;
+
+	/**
+	 * Send a message (via HTTP) to a specific WebSocket target.
+	 * @NOTE This is the HTTP-accessible version of `Socket.whisper`
+	 */
+	whisper(target: string, msg: Message): Promise<void>;
+
+	/**
 	 * Respond to another Replica's gossip.
 	 * @NOTE Must return a JSON-serializable value.
 	 */

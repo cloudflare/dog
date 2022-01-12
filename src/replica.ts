@@ -30,6 +30,8 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 	readonly #parent: DurableObjectNamespace;
 	readonly #self: DurableObjectNamespace;
 
+	#gid?: string;
+
 	constructor(state: DurableObjectState, env: T) {
 		this.uid = state.id.toString();
 		this.#neighbors = new Set;
@@ -168,7 +170,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 		if (this.#neighbors.size < 1) return [];
 
 		let list = await this.#dispatch({
-			group: 'Q', // ignored
+			group: this.#gid!,
 			sender: this.uid, // this replica
 			route: ROUTES.GOSSIP,
 			body: msg == null ? msg : JSON.stringify(msg)
@@ -192,6 +194,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 		}
 
 		if (pathname === ROUTES.NEIGHBOR) {
+			this.#gid = this.#gid || gid; // save
 			// rid === HEADERS.NEIGHBORID
 			this.#neighbors.add(rid);
 			return new Response;
@@ -246,6 +249,18 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 				await this.#close(rid, gid, true);
 			}
 		}
+	}
+
+	emit(msg: DOG.Message): void {
+		this.#emit(this.#gid!, msg, true);
+	}
+
+	broadcast(msg: DOG.Message): Promise<void> {
+		return this.#broadcast(this.#gid!, this.uid, msg, true);
+	}
+
+	whisper(target: string, msg: DOG.Message): Promise<void> {
+		return this.#whisper(this.#gid!, this.uid, target, msg);
 	}
 
 	/**
