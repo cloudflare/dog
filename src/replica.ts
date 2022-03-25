@@ -309,12 +309,14 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 			commons[HEADERS.TARGETID] = params.target;
 		}
 
+		let url = new URL(params.route, 'http://dog');
+
 		return Promise.all(
 			list.map(sid => {
 				let stub = utils.load(this.#self, sid);
 				let headers = new Headers(commons);
 				headers.set(HEADERS.OBJECTID, sid);
-				return stub.fetch(params.route, {
+				return stub.fetch(url.href, {
 					method: 'POST',
 					headers: headers,
 					body: params.body,
@@ -355,7 +357,8 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 
 		// Prepare internal request
 		// ~> notify Group of -1 count
+		let url = new URL(ROUTES.CLOSE, 'http://dog');
 		let group = utils.load(this.#parent, gid);
-		await group.fetch('http://dog' + ROUTES.CLOSE, { headers });
+		await group.fetch(url.href, { headers });
 	}
 }

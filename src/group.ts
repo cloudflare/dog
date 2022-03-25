@@ -138,8 +138,9 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 		headers.set(HEADERS.NEIGHBORID, stranger);
 		headers.set(HEADERS.GROUPID, this.uid);
 
+		let url = new URL(ROUTES.IDENTIFY, 'http://dog');
 		let stub = utils.load(this.#child, target);
-		return stub.fetch(ROUTES.NEIGHBOR, { headers });
+		return stub.fetch(url.href, { headers });
 	}
 
 	/**
