@@ -2,7 +2,7 @@
   "name": "dog",
   "type": "module",
   "version": "1.1.0",
-  "repository": "lukeed/dog",
+  "repository": "cloudflare/dog",
   "description": "Durable Object Groups",
   "types": "index.d.ts",
   "module": "index.js",
