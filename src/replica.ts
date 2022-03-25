@@ -356,6 +356,6 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 		// Prepare internal request
 		// ~> notify Group of -1 count
 		let group = utils.load(this.#parent, gid);
-		await group.fetch(ROUTES.CLOSE, { headers });
+		await group.fetch('http://dog' + ROUTES.CLOSE, { headers });
 	}
 }
