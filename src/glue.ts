@@ -6,7 +6,7 @@ import type * as DOG from 'dog';
 export const identify: typeof DOG.identify = async function (gid, rid, family) {
 	let group = family.parent.get(gid);
 
-  let request = new Request(new URL(ROUTES.IDENTIFY, 'http://dog'));
+	let request = new Request('http://dog' + ROUTES.IDENTIFY);
 	request.headers.set(HEADERS.GROUPID, gid.toString());
 	request.headers.set(HEADERS.CLIENTID, rid);
 
