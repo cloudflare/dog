@@ -55,7 +55,7 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 	 */
 	async fetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
 		let request = new Request(input, init);
-		let { pathname } = new URL(request.url, 'foo://');
+    	let { pathname } = new URL(request.url, 'http://dog');
 
 		if (pathname === ROUTES.CLOSE) {
 			try {
