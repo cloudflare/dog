@@ -95,7 +95,7 @@ export abstract class Group<T extends ModuleWorker.Bindings> implements DOG.Grou
 				sid = pair[0];
 				alive = pair[1] + 1;
 			} else {
-				sid = await this.clusterize(request, this.#child).toString();
+				sid = (await this.clusterize(request, this.#child)).toString();
 				this.#welcome(sid); // no await!
 				alive = 1;
 			}
