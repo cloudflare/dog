@@ -23,6 +23,10 @@ const worker: ModuleWorker<Bindings> = {
 			});
 		}
 
+		if (pathname === '/favicon.ico') {
+			return new Response(null, { status: 404 });
+		}
+
 		// ~> determine request identifier
 		// NOTE: ideally result of some cookie/auth process
 		let { searchParams } = new URL(req.url);
