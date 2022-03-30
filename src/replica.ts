@@ -126,6 +126,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 				}
 
 				await this.#close(rid, gid, isEmpty);
+
 				try {
 					server.close();
 				} catch (e) {
