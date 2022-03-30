@@ -111,7 +111,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 		let closer = async (evt: Event) => {
 			try {
 				if (evt.type === 'error' && this.onerror) await this.onerror(socket);
-				else if (this.onclose) await this.onclose(socket);
+				else if (this.onclose) await this.onclose(socket, server);
 			} finally {
 				let state = this.#pool.get(rid);
 				let isEmpty: boolean;
@@ -135,12 +135,12 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 
 		if (this.onmessage) {
 			server.addEventListener('message', evt => {
-				this.onmessage!(socket, evt.data);
+				this.onmessage!(socket, evt.data, server);
 			});
 		}
 
 		if (this.onopen) {
-			await this.onopen(socket);
+			await this.onopen(socket, server);
 		}
 
 		let state: DOG.State = this.#pool.get(rid) || {
