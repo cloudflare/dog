@@ -130,7 +130,7 @@ export abstract class Replica<T extends ModuleWorker.Bindings> implements DOG.Re
 				try {
 					server.close();
 				} catch (e) {
-					//
+					// already closed
 				}
 			}
 		}
