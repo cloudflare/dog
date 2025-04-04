@@ -1,3 +1,5 @@
+🚧 This project is not suitable for production usage 🚧
+
 # DOG [![CI](https://github.com/lukeed/dog/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/lukeed/dog/actions/workflows/ci.yml)
 
 > Durable Object Groups
